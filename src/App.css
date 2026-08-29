@@ -68,7 +68,6 @@ body {
 
 /* Header */
 .header {
-  position: relative;
   text-align: center;
   padding: 2rem 1rem;
   background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
@@ -92,21 +91,21 @@ body {
 }
 
 .theme-toggle {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: inline-block;
+  margin-top: 0.8rem;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 20px;
-  color: #ffffff;
+  color: var(--text-secondary);
   padding: 0.4rem 0.9rem;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 .theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.28);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 /* Main Content */

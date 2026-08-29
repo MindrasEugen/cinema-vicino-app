@@ -83,14 +83,6 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          aria-label="Cambia tema chiaro/scuro"
-          title={theme === 'dark' ? 'Passa al tema chiaro' : 'Passa al tema scuro'}
-        >
-          {theme === 'dark' ? '☀️ Chiaro' : '🌙 Scuro'}
-        </button>
         <h1>Al Cinema Vicino a Te</h1>
         <p className="subtitle">Scopri i film al cinema e i cinema vicino a te</p>
       </header>
@@ -177,6 +169,14 @@ function App() {
 
       <footer className="footer">
         <p>Dati forniti da: MYmovies.it, TMDB (fallback), OpenStreetMap (Nominatim &amp; Overpass API)</p>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label="Cambia tema chiaro/scuro"
+          title={theme === 'dark' ? 'Passa al tema chiaro' : 'Passa al tema scuro'}
+        >
+          {theme === 'dark' ? '☀️ Tema chiaro' : '🌙 Tema scuro'}
+        </button>
       </footer>
     </div>
   );

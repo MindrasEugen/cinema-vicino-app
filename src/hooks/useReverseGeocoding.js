@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
+import { normalizeCitySlug } from '../services/mymoviesParser';
 
 /**
- * Hook per ottenere il codice paese dalle coordinate tramite Nominatim (OpenStreetMap)
+ * Hook per ottenere il codice paese e la città dalle coordinate tramite Nominatim (OpenStreetMap)
  * @param {number} lat - Latitudine
  * @param {number} lng - Longitudine
- * @returns {Object} { countryCode, countryName, error, loading }
+ * @returns {Object} { countryCode, countryName, cityName, citySlug, error, loading }
  */
 export function useReverseGeocoding(lat, lng) {
   const [countryCode, setCountryCode] = useState(null);
   const [countryName, setCountryName] = useState(null);
+  const [cityName, setCityName] = useState(null);
+  const [citySlug, setCitySlug] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -37,9 +40,19 @@ export function useReverseGeocoding(lat, lng) {
         // Estrai il codice paese (ISO 3166-1 alpha-2) e lo portiamo in maiuscolo
         const code = data.address?.country_code?.toUpperCase() || null;
         const name = data.address?.country || null;
-        
+        // Nominatim non ha un campo "città" unico: a seconda del tipo di area
+        // il nome utile può comparire sotto chiavi diverse.
+        const city =
+          data.address?.city ||
+          data.address?.town ||
+          data.address?.village ||
+          data.address?.municipality ||
+          null;
+
         setCountryCode(code);
         setCountryName(name);
+        setCityName(city);
+        setCitySlug(normalizeCitySlug(city));
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
@@ -54,5 +67,5 @@ export function useReverseGeocoding(lat, lng) {
     return () => controller.abort();
   }, [lat, lng]);
 
-  return { countryCode, countryName, error, loading };
+  return { countryCode, countryName, cityName, citySlug, error, loading };
 }

@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>cinema-vicino-app</title>
+    <script>
+      // Applica il tema salvato prima del render React, per evitare un flash
+      // del tema scuro (default) quando l'utente ha scelto quello chiaro.
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', stored);
+          }
+        } catch {
+          // localStorage non disponibile: si parte dal tema scuro di default.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

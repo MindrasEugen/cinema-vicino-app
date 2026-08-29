@@ -101,3 +101,84 @@
 ## Dipendenze
 
 Nessuna dipendenza esterna oltre a React e Vite. Tutti i calcoli e le chiamate API sono implementati con codice nativo.
+
+## MYmovies.it come fonte primaria, TMDB come fallback automatico
+
+A partire da questa versione l'app è limitata all'Italia e usa **MYmovies.it** come
+fonte primaria per film + cinema che li proiettano (già abbinati nella stessa
+pagina, niente fuzzy matching tra fonti diverse). **TMDB** resta configurato e
+scatta automaticamente come fallback solo quando MYmovies non risponde o la sua
+struttura risulta cambiata.
+
+### Moduli coinvolti
+
+- `src/services/mymoviesParser.js` — parsing puro/isomorfo (nessuna API browser),
+  usato sia a runtime sia dallo script di controllo struttura.
+- `src/services/mymoviesService.js` — fetch con cache (qualche ora) + gestione CORS,
+  lancia `MyMoviesFetchError` / `MyMoviesStructureError` in caso di fallimento.
+- `src/services/tmdbService.js` — fallback completo (now_playing IT) e fallback
+  puntuale solo-trailer per singolo film.
+- `src/services/cinemaMatcher.js` — confronto tollerante dei nomi cinema
+  MYmovies ↔ Overpass.
+- `src/hooks/useMyMoviesData.js` — orchestrazione + log del fallback in console
+  (prefisso `[MyMovies]`, utile in manutenzione per capire quando/se scatta).
+
+### Orari di proiezione per cinema
+
+Gli orari (uno o più per cinema, es. "15:30, 18:00, 21:15") sono estratti da
+`mymoviesParser.js` insieme al resto: sono già presenti inline nella stessa
+sezione "OGGI A {CITTÀ}" di ogni film (blocco `orari-dettaglio` subito dopo il
+nome di ciascun cinema), quindi non serve alcuna richiesta HTTP aggiuntiva per
+ottenerli (a differenza di quanto sarebbe servito se fossero stati disponibili
+solo sulla pagina del singolo cinema). Se lo stesso cinema compare più volte
+nella sezione (es. versione doppiata + versione originale come voci separate),
+gli orari vengono uniti sotto un'unica voce e ordinati cronologicamente. In
+modalità fallback TMDB gli orari non sono mai disponibili (TMDB è un database
+di film generico, non di programmazione): la nota visibile in home lo indica
+esplicitamente.
+
+### Gestione CORS
+
+MYmovies.it non espone header CORS (verificato: nessun `Access-Control-Allow-Origin`),
+quindi un fetch diretto dal browser viene bloccato. Soluzione a due livelli:
+
+- **Sviluppo** (`npm run dev`): `vite.config.js` proxya `/mymovies-proxy/*` verso
+  `https://www.mymovies.it/*` tramite il dev server Node (il browser non fa mai
+  una richiesta cross-origin diretta).
+- **Produzione**: non essendoci un backend nel progetto, `mymoviesService.js` usa
+  come soluzione minima un proxy CORS pubblico (`corsproxy.io`). È un punto di
+  fragilità aggiuntivo rispetto al parsing stesso: se anche questo comincia a
+  fallire, scatta comunque il fallback TMDB, quindi l'app resta utilizzabile.
+  Se in futuro si aggiunge un backend proprio, va sostituito con un proxy
+  self-hosted.
+
+### Script di controllo struttura — rilanciare periodicamente
+
+`tests/test-mymovies-scraper-struttura.js` scarica una pagina reale (Milano) e
+verifica che gli elementi chiave attesi siano ancora presenti (blocchi film,
+sezione "OGGI A", link ai cinema, almeno un film estratto con showings).
+
+```
+node tests/test-mymovies-scraper-struttura.js
+```
+
+**Va rilanciato periodicamente (indicativamente una volta a settimana)**: i siti
+di terze parti cambiano struttura senza preavviso. Se il test fallisce, il
+markup di `src/services/mymoviesParser.js` va aggiornato di conseguenza.
+
+**Nel frattempo l'app non si rompe**: se la struttura di MYmovies cambia anche
+in produzione (non solo nel test), `checkStructureSanity()` lo rileva a runtime
+e fa scattare da sola il fallback automatico su TMDB — stessa logica usata dal
+test, quindi i due punti di verifica sono sempre allineati. Si perde solo
+l'abbinamento film-cinema (mostrato con una nota visibile in app), non la
+disponibilità del servizio.
+
+## Tema chiaro/scuro
+
+Il tema scuro esistente è invariato (stesse variabili in `:root` in `App.css`).
+Il tema chiaro è un blocco separato `[data-theme="light"]` con una palette
+propria (non un'inversione meccanica dei colori). La scelta è gestita da
+`src/hooks/useTheme.js`, salvata in `localStorage` (chiave `theme`) e applicata
+via attributo `data-theme` su `<html>`; default `dark` se non è mai stata
+scelta una preferenza. Un piccolo script inline in `index.html` applica il tema
+salvato prima del render React, per evitare un flash del tema scuro di default.

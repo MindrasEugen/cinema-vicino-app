@@ -11,7 +11,29 @@
   --success-color: #4caf50;
   --error-color: #f44336;
   --loading-color: #ffc107;
+  --poster-placeholder-start: #333333;
+  --poster-placeholder-end: #555555;
   --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Tema chiaro: variabili ridefinite (non un'inversione meccanica). Il rosso
+   di brand è scurito rispetto al tema scuro per restare leggibile come testo
+   e come sfondo di badge su superfici chiare; i toni "semantici" (successo,
+   errore, loading) sono scuriti allo stesso scopo. */
+[data-theme="light"] {
+  --primary-color: #b2070f;
+  --primary-dark: #7a0510;
+  --secondary-color: #e9e9ec;
+  --text-color: #1a1a1a;
+  --text-secondary: #55555a;
+  --bg-color: #f4f4f6;
+  --card-bg: #ffffff;
+  --border-color: #d9d9dd;
+  --success-color: #2e7d32;
+  --error-color: #c62828;
+  --loading-color: #8a6300;
+  --poster-placeholder-start: #e2e2e6;
+  --poster-placeholder-end: #cfcfd4;
 }
 
 /* Reset di base */
@@ -46,6 +68,7 @@ body {
 
 /* Header */
 .header {
+  position: relative;
   text-align: center;
   padding: 2rem 1rem;
   background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
@@ -53,15 +76,37 @@ body {
   border-radius: 0 0 10px 10px;
 }
 
+/* Lo sfondo dell'header è sempre il gradiente rosso, in entrambi i temi:
+   il testo resta bianco fisso (non var(--text-color)), altrimenti nel tema
+   chiaro diventerebbe scuro-su-rosso e illeggibile. */
 .header h1 {
   font-size: 2.5rem;
   margin-bottom: 0.5rem;
+  color: #ffffff;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .header .subtitle {
   font-size: 1.1rem;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px;
+  color: #ffffff;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* Main Content */
@@ -81,6 +126,34 @@ body {
   margin-bottom: 1.5rem;
   padding-bottom: 0.5rem;
   border-bottom: 2px solid var(--primary-color);
+}
+
+/* Affianca un titolo di sezione (h2) a un elemento accessorio (es. un
+   pulsante) sulla stessa riga; torna impilato sotto i ~600px. */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+  flex: 1;
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .section-header .cinema-link-button {
+    text-align: center;
+  }
 }
 
 /* Messaggi di stato */
@@ -139,18 +212,50 @@ body {
   color: var(--error-color);
 }
 
-/* Movies Grid */
+/* Movies Grid — responsive a breakpoint: 1 colonna sotto i 360px, poi 2/3/4/5
+   colonne crescendo con la larghezza (vedi blocco Responsive più sotto per i
+   breakpoint espliciti). */
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 361px) {
+  .movies-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 481px) {
+  .movies-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .movies-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1201px) {
+  .movies-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1.5rem;
+  }
 }
 
 .movie-card {
+  display: block;
   background-color: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   overflow: hidden;
+  text-decoration: none;
+  color: inherit;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -160,14 +265,17 @@ body {
 }
 
 .movie-poster {
-  height: 400px;
+  height: 320px;
+  padding: 10px;
+  box-sizing: border-box;
   overflow: hidden;
-  background: linear-gradient(45deg, #333, #555);
+  background-color: var(--card-bg);
 }
 
 .movie-poster img {
   width: 100%;
   height: 100%;
+  border-radius: 6px;
   object-fit: cover;
   transition: transform 0.3s ease;
 }
@@ -179,10 +287,11 @@ body {
 .movie-poster .poster-placeholder {
   width: 100%;
   height: 100%;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(45deg, #333, #555);
+  background: linear-gradient(45deg, var(--poster-placeholder-start), var(--poster-placeholder-end));
   color: var(--text-secondary);
 }
 
@@ -210,7 +319,27 @@ body {
 }
 
 .movie-vote {
-  color: #ffc107;
+  color: var(--loading-color);
+}
+
+.movie-vote-number {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.star-rating {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 1rem;
+  vertical-align: middle;
+}
+
+.star-filled {
+  color: var(--loading-color);
+}
+
+.star-empty {
+  color: var(--border-color);
 }
 
 .movie-overview {
@@ -218,6 +347,195 @@ body {
   font-size: 0.9rem;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.movie-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.movie-genre-badge {
+  background-color: var(--secondary-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.movie-cast {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.movie-cast strong {
+  color: var(--text-color);
+}
+
+.movie-trailer-link {
+  display: inline-block;
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.movie-trailer-link:hover {
+  text-decoration: underline;
+}
+
+.movie-trailer-btn {
+  margin-top: 0.8rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.3rem 0.7rem;
+}
+
+.movie-trailer-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.movie-showings {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.movie-showings h4 {
+  font-size: 0.85rem;
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+}
+
+.movie-showing-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.movie-showing-item:last-child {
+  border-bottom: none;
+}
+
+.movie-showing-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.movie-showing-main > span:first-child {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.movie-showing-times {
+  font-size: 0.8rem;
+}
+
+.movie-showing-links {
+  display: flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+  padding-top: 0.1rem;
+}
+
+.movie-showing-links a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.movie-showing-links a:hover {
+  text-decoration: underline;
+}
+
+.movie-showings-empty {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.cinema-link-button {
+  display: inline-block;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.6rem 1.2rem;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--primary-color);
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.cinema-link-button:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-2px);
+}
+
+/* Pagina dettaglio film */
+.back-link {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.film-detail-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.film-detail-poster {
+  flex: 0 0 220px;
+  max-width: 220px;
+  aspect-ratio: 2 / 3;
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: var(--card-bg);
+}
+
+.film-detail-poster img {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+}
+
+.film-detail-info {
+  flex: 1;
+  min-width: 260px;
+}
+
+.film-detail-info h2 {
+  font-size: 1.8rem;
+  margin-bottom: 0.8rem;
+  color: var(--text-color);
 }
 
 /* Cinemas List */
@@ -306,12 +624,7 @@ body {
   .header h1 {
     font-size: 2rem;
   }
-  
-  .movies-grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 1rem;
-  }
-  
+
   .section h2 {
     font-size: 1.5rem;
   }
@@ -325,11 +638,7 @@ body {
   .header .subtitle {
     font-size: 0.95rem;
   }
-  
-  .movies-grid {
-    grid-template-columns: 1fr;
-  }
-  
+
   .cinema-header {
     flex-direction: column;
     align-items: flex-start;

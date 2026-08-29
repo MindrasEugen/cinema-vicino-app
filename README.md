@@ -1,13 +1,17 @@
 # Al Cinema Vicino a Te
 
-Un'app web che geolocalizza l'utente e mostra i film attualmente al cinema nel suo paese, insieme ai cinema fisici più vicini entro un raggio di 10 km. Perfetto per trovare rapidamente cosa guardare e dove guardarlo.
+Un'app web (solo Italia) che geolocalizza l'utente e mostra i film in programmazione nella sua città, già abbinati ai cinema che li proiettano oggi. Perfetto per trovare rapidamente cosa guardare e dove guardarlo.
 
 ## Funzionalità principali
 
 - **Geolocalizzazione automatica** — Rileva la posizione dell'utente tramite browser (con permesso esplicito)
-- **Film al cinema** — Recupera la lista di film attualmente in programmazione nel paese rilevato (dati TMDB)
-- **Cinema vicini** — Trova cinema fisici nel raggio di 10 km dalla posizione dell'utente (dati OpenStreetMap)
+- **Film + cinema abbinati (MYmovies.it)** — Fonte primaria: film in programmazione nella città rilevata, con sinossi, cast, trailer e le sale che li proiettano oggi, già nella stessa pagina (nessun fuzzy matching tra fonti diverse)
+- **Fallback automatico su TMDB** — Se MYmovies non risponde o cambia struttura, l'app passa da sola a TMDB (film) + Overpass (cinema vicini) come due liste separate, con una nota visibile che l'abbinamento film-cinema non è momentaneamente disponibile
+- **Cinema vicini** — Trova cinema fisici nel raggio di 10 km dalla posizione dell'utente (OpenStreetMap / Overpass), incrociati con MYmovies quando disponibile
+- **Tema chiaro/scuro** — Selettore in header, preferenza salvata e ripristinata al ricaricamento (default: scuro)
 - **Distanze calcolate** — Mostra la distanza di ogni cinema usando la formula di Haversine
+
+Dettagli tecnici su parsing MYmovies, gestione CORS e manutenzione dello scraper in [NOTE.md](./NOTE.md#mymoviesit-come-fonte-primaria-tmdb-come-fallback-automatico).
 
 ## Stack tecnico
 
@@ -42,8 +46,9 @@ Un'app web che geolocalizza l'utente e mostra i film attualmente al cinema nel s
 
 ## Fonti dati
 
-- **TMDB (The Movie Database)** — Film attualmente al cinema
-- **Nominatim (OpenStreetMap)** — Reverse geocoding per determinare il paese
+- **MYmovies.it** — Fonte primaria: film in programmazione, sinossi, cast, trailer e cinema che li proiettano oggi, per città
+- **TMDB (The Movie Database)** — Fallback automatico quando MYmovies non è disponibile
+- **Nominatim (OpenStreetMap)** — Reverse geocoding per determinare paese e città
 - **Overpass API (OpenStreetMap)** — Cinema fisici nelle vicinanze
 
 Per dettagli su endpoint API, rate limit e limitazioni note, consulta [NOTE.md](./NOTE.md#endpoint-api-utilizzati).

@@ -146,11 +146,15 @@ quindi un fetch diretto dal browser viene bloccato. Soluzione a due livelli:
   `https://www.mymovies.it/*` tramite il dev server Node (il browser non fa mai
   una richiesta cross-origin diretta).
 - **Produzione**: non essendoci un backend nel progetto, `mymoviesService.js` usa
-  come soluzione minima un proxy CORS pubblico (`corsproxy.io`). È un punto di
+  come soluzione minima un proxy CORS pubblico (`proxy.cors.sh`, verificato
+  funzionante il 2026-08-30 sul deploy Render — `corsproxy.io`, usato in
+  precedenza, ha iniziato a richiedere una API key a pagamento). È un punto di
   fragilità aggiuntivo rispetto al parsing stesso: se anche questo comincia a
   fallire, scatta comunque il fallback TMDB, quindi l'app resta utilizzabile.
-  Se in futuro si aggiunge un backend proprio, va sostituito con un proxy
-  self-hosted.
+  Se dovesse rompersi di nuovo, verificare con un fetch diretto dal browser
+  sull'app deployata (non solo in locale, dove in dev si usa il proxy Vite) —
+  è così che è stato scoperto questo problema. Se in futuro si aggiunge un
+  backend proprio, va sostituito con un proxy self-hosted.
 
 ### Script di controllo struttura — rilanciare periodicamente
 

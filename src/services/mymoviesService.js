@@ -22,7 +22,18 @@ const FETCH_TIMEOUT_MS = 12000;
 // È di per sé un punto di fragilità aggiuntivo (dipendenza da un servizio
 // terzo): se anche questo comincia a fallire, il fallback TMDB scatta lo
 // stesso, quindi l'app resta comunque utilizzabile.
-const PUBLIC_CORS_PROXY = 'https://corsproxy.io/?url=';
+//
+// Nota di manutenzione (verificato 2026-08-30 sul deploy Render): corsproxy.io
+// ha iniziato a richiedere una API key a pagamento (401 su ogni richiesta),
+// quindi è stato sostituito con proxy.cors.sh. Un'alternativa come
+// api.allorigins.win/raw?url= è stata scartata perché tronca silenziosamente
+// pagine di queste dimensioni (si ferma a metà con "[BLOCKED: Cookie/query
+// string data]"), restituendo solo una manciata di film senza segnalare
+// errore — peggio del fallback TMDB pulito che scatta se proxy.cors.sh smette
+// di funzionare. Se anche questo dovesse rompersi, verificare di nuovo con lo
+// stesso metodo (fetch diretto dal browser sull'app deployata) prima di
+// sceglierne un altro.
+const PUBLIC_CORS_PROXY = 'https://proxy.cors.sh/';
 
 const cache = new Map(); // citySlug -> { html, fetchedAt }
 
@@ -47,7 +58,7 @@ function buildRequestUrl(citySlug) {
   if (import.meta.env.DEV) {
     return `/mymovies-proxy/cinema/${citySlug}/`;
   }
-  return `${PUBLIC_CORS_PROXY}${encodeURIComponent(targetUrl)}`;
+  return `${PUBLIC_CORS_PROXY}${targetUrl}`;
 }
 
 function isCacheFresh(entry) {

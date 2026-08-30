@@ -62,6 +62,7 @@
 - **Qualità dei dati:** Alcuni cinema potrebbero non avere nome, indirizzo o sito web
 - **Aree rurali:** In zone poco abitate, potrebbero non esserci cinema nel raggio di 10 km
 - **Ritardi:** Le modifiche su OSM possono impiegare tempo per essere riflessi in Overpass
+- **Intermittenza del server primario:** `overpass-api.de` risponde a volte con HTTP 503 (sovraccarico) senza header CORS, causando un generico "Failed to fetch" nel browser. Per questa ragione, `src/hooks/useNearbyCinemas.js` implementa un fallback automatico: se `overpass-api.de` fallisce, ritenta automaticamente su `overpass.openstreetmap.fr` (mirror ufficiale OSM France, verificato con CORS funzionante) prima di propagare l'errore all'utente. Nota: un mirror alternativo (`overpass.kumi.systems`) è stato scartato perché, verificato il 2026-08-30, risultava in transizione verso un altro dominio (`overpass.private.coffee`) e restituiva errori 500/502 su entrambi. Se anche `overpass.openstreetmap.fr` dovesse smettere di funzionare in futuro, verificare di nuovo manualmente con curl (status HTTP + header `Access-Control-Allow-Origin`) prima di sceglierne un altro, come fatto qui.
 
 ### Geolocalizzazione Browser
 - **Permesso necessario:** L'utente deve consentire esplicitamente l'accesso alla posizione

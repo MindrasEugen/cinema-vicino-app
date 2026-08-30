@@ -3,6 +3,8 @@ import { haversine } from '../utils/haversine';
 
 /**
  * Hook per ottenere i cinema vicini tramite Overpass API (OpenStreetMap)
+ * Implementa fallback automatico: se overpass-api.de fallisce, ritenta su overpass.openstreetmap.fr
+ * (vedi NOTE.md per la gestione della intermittenza di Overpass).
  * @param {number} lat - Latitudine dell'utente
  * @param {number} lng - Longitudine dell'utente
  * @returns {Object} { cinemas, error, loading }
@@ -30,23 +32,51 @@ export function useNearbyCinemas(lat, lng) {
 out center;
 `;
 
-    fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: query,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-      },
-      signal: controller.signal
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        const cinemasData = data.elements || [];
+    /**
+     * Funzione helper per fare il fetch da un endpoint Overpass specifico.
+     * Ritorna una Promise che resolve in `data.elements` se succede,
+     * oppure reject se:
+     * - la fetch stessa fallisce (network error, AbortError, ecc.)
+     * - response.ok è false
+     * - il body non è JSON valido
+     * 
+     * @param {string} endpoint - URL dell'API Overpass da contattare
+     * @returns {Promise<Array>} Array di elementi Overpass
+     */
+    async function fetchFromOverpass(endpoint) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: query,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.elements || [];
+    }
+
+    /**
+     * Processo main: prova il primo endpoint, poi il fallback se il primo fallisce.
+     */
+    (async () => {
+      try {
+        let cinemasData;
         
+        // Tentativo 1: endpoint primario
+        try {
+          cinemasData = await fetchFromOverpass('https://overpass-api.de/api/interpreter');
+        } catch (primaryError) {
+          // Se il primario fallisce, prova il mirror di fallback
+          console.warn('[Overpass] Primario (overpass-api.de) fallito, ritento su fallback (overpass.openstreetmap.fr):', primaryError.message);
+          cinemasData = await fetchFromOverpass('https://overpass.openstreetmap.fr/api/interpreter');
+        }
+
         // Elabora i risultati: gestisci sia nodi che way
         const processedCinemas = cinemasData.map(element => {
           // Per i way, otteniamo il centro del poligono
@@ -84,16 +114,15 @@ out center;
         processedCinemas.sort((a, b) => a.distance - b.distance);
         
         setCinemas(processedCinemas);
-      })
-      .catch(err => {
+      } catch (err) {
         if (err.name !== 'AbortError') {
-          console.error('Errore nel caricamento dei cinema:', err);
+          console.error('Errore nel caricamento dei cinema (entrambi gli endpoint falliti):', err);
           setError('Impossibile caricare i cinema vicini. I dati potrebbero essere incompleti per la tua zona.');
         }
-      })
-      .finally(() => {
+      } finally {
         setLoading(false);
-      });
+      }
+    })();
 
     return () => controller.abort();
   }, [lat, lng]);

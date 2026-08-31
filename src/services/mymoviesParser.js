@@ -18,9 +18,13 @@ function stripAccents(str) {
 
 /**
  * Normalizza un nome città nello slug usato da MYmovies nell'URL
- * `https://www.mymovies.it/cinema/{slug}/` (es. "Reggio Emilia" -> "reggio-emilia").
- * Se lo slug indovinato non corrisponde a una città coperta, il fetch fallirà
- * (404 o pagina senza blocchi film) e scatterà il fallback TMDB automaticamente.
+ * `https://www.mymovies.it/cinema/{slug}/`. Verificato con richieste dirette
+ * (2026-08-31) su diversi comuni multi-parola: MYmovies concatena le parole
+ * SENZA alcun separatore (es. "Reggio Emilia" -> "reggioemilia", non
+ * "reggio-emilia"; "La Spezia" -> "laspezia"; "San Benedetto del Tronto" ->
+ * "sanbenedettodeltronto" — le forme con trattino rispondono 404). Se lo slug
+ * indovinato non corrisponde a una città coperta, il fetch fallirà (404 o
+ * pagina "provincia non trovata") e scatterà il fallback TMDB automatico.
  */
 export function normalizeCitySlug(cityName) {
   if (!cityName) return null;
@@ -28,9 +32,54 @@ export function normalizeCitySlug(cityName) {
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[\s-]+/g, '');
+}
+
+// Nominatim antepone talvolta uno di questi prefissi amministrativi al nome
+// vero e proprio della provincia (verificato: "Provincia di Trento" per Trento,
+// ma "Milano"/"Napoli"/"Torino"/"Bergamo" senza prefisso per altre — non è
+// uniforme). Vanno rimossi prima di ricavare lo slug per l'URL MYmovies.
+// Confrontati con il nome già passato da stripAccents, quindi senza accenti.
+const PROVINCE_NAME_PREFIXES = [
+  'libero consorzio comunale di ',
+  'citta metropolitana di ',
+  'provincia di ',
+  'provincia autonoma di ',
+];
+
+/**
+ * Normalizza il nome di una provincia (tipicamente `address.county` da
+ * Nominatim, es. "Provincia di Trento" o "Bolzano - Bozen") nello slug usato
+ * da MYmovies nella forma `/cinema/{provincia-slug}/{comune-slug}/` (es.
+ * "trento", "bolzano"). Ritorna null se non c'è nulla da normalizzare.
+ */
+export function normalizeProvinceSlug(rawProvinceName) {
+  if (!rawProvinceName) return null;
+  let name = stripAccents(rawProvinceName).toLowerCase().trim();
+
+  for (const prefix of PROVINCE_NAME_PREFIXES) {
+    if (name.startsWith(prefix)) {
+      name = name.slice(prefix.length);
+      break;
+    }
+  }
+
+  // Nomi bilingue (Alto Adige/Sudtirolo, es. "Bolzano - Bozen"): tiene solo
+  // la prima forma, quella usata da MYmovies negli URL italiani.
+  name = name.split(' - ')[0].trim();
+
+  return normalizeCitySlug(name);
+}
+
+/**
+ * Rileva la pagina di errore mostrata da MYmovies quando il primo segmento
+ * dell'URL `/cinema/{x}/` non corrisponde a nessuna provincia nota (es.
+ * `/cinema/rivadelgarda/` per un comune che richiede invece la forma
+ * `/cinema/{provincia}/{comune}/`). La pagina risponde comunque HTTP 200,
+ * quindi va rilevata dal contenuto, non dallo status.
+ */
+export function isProvinceNotFoundPage(html) {
+  return /Non trovo nessuna provincia/i.test(html);
 }
 
 /** Decodifica sicura di componenti URI, senza sollevare eccezioni su input malformato. */

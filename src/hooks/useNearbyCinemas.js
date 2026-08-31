@@ -23,11 +23,19 @@ export function useNearbyCinemas(lat, lng) {
     // Raggio di ricerca in metri (10 km)
     const radius = 10000;
     
-    // Query Overpass QL per trovare cinema (nodi e way) in un raggio di 10km
+    // Query Overpass QL per trovare cinema (nodi e way) in un raggio di 10km.
+    // Oltre al tag standard amenity=cinema, include anche leisure=cinema:
+    // variante meno comune ma usata in OSM per alcune sale, specie piccole/di
+    // paese, che altrimenti risulterebbero invisibili pur essendo mappate
+    // (vedi NOTE.md). amenity=theatre è stato scartato: in OSM indica teatri
+    // generici, non necessariamente sale cinematografiche, e includerlo
+    // rischierebbe più falsi positivi che cinema realmente recuperati.
     const query = `[out:json];
 (
   node["amenity"="cinema"](around:${radius},${lat},${lng});
   way["amenity"="cinema"](around:${radius},${lat},${lng});
+  node["leisure"="cinema"](around:${radius},${lat},${lng});
+  way["leisure"="cinema"](around:${radius},${lat},${lng});
 );
 out center;
 `;

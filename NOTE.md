@@ -157,6 +157,100 @@ quindi un fetch diretto dal browser viene bloccato. Soluzione a due livelli:
   è così che è stato scoperto questo problema. Se in futuro si aggiunge un
   backend proprio, va sostituito con un proxy self-hosted.
 
+### Bug: MYmovies non funzionava per i comuni piccoli (risolto 2026-08-31)
+
+Segnalato con un caso reale (Riva del Garda, TN): l'app restava sempre in
+fallback TMDB anche quando MYmovies avrebbe dovuto avere dati per la zona.
+Individuate e corrette **due cause distinte**, entrambe in `citySlug`/
+`provinceSlug` costruiti da `useReverseGeocoding.js` e usati da
+`mymoviesService.js`:
+
+1. **`normalizeCitySlug` inseriva un trattino tra le parole** (es. "Riva del
+   Garda" → `riva-del-garda`), ma MYmovies concatena le parole **senza alcun
+   separatore** (slug reale: `rivadelgarda`). Verificato con richieste dirette
+   su più comuni multi-parola: `reggioemilia` (non `reggio-emilia`),
+   `laspezia` (non `la-spezia`), `sanbenedettodeltronto` (non
+   `san-benedetto-del-tronto`) — la forma con trattino risponde sempre 404.
+   Questo bug non riguardava solo i comuni piccoli: qualsiasi comune con nome
+   composto da più parole (piccolo o capoluogo) falliva silenziosamente e
+   finiva sempre in fallback. I comuni monoparola (Milano, Napoli, Torino,
+   Bergamo...) non erano toccati dal problema, il che ha reso il bug più
+   difficile da notare inizialmente.
+2. **I comuni non capoluogo richiedono la forma `/cinema/{provincia}/{comune}/`**
+   invece della forma semplice `/cinema/{comune}/`, che per loro non è
+   coperta. MYmovies non risponde con un vero HTTP 404 in questo caso, ma con
+   una pagina HTTP 200 il cui testo contiene "Non trovo nessuna provincia
+   {slug}" — va quindi rilevata dal contenuto (`isProvinceNotFoundPage` in
+   `mymoviesParser.js`), non dallo status.
+
+**Fix**: `getFilmsForCity` (in `mymoviesService.js`) prova prima la forma
+semplice `/cinema/{comune}/`; se la risposta è la pagina "provincia non
+trovata", ritenta automaticamente con `/cinema/{provincia}/{comune}/`, usando
+`provinceSlug` ricavato in `useReverseGeocoding.js` da `address.county` (o
+`address.state_district`) di Nominatim tramite `normalizeProvinceSlug`. Questo
+campo non è uniforme tra le province italiane: a volte è prefissato ("Provincia
+di Trento"), a volte no ("Milano"), a volte bilingue ("Bolzano - Bozen") —
+`normalizeProvinceSlug` ripulisce tutti questi casi prima di ricavare lo slug.
+
+**Limite noto residuo**: per alcuni comuni il nome ufficiale restituito da
+Nominatim include particelle che MYmovies non usa nel proprio slug (es.
+"Reggio nell'Emilia" → MYmovies si aspetta `reggioemilia`, non
+`reggionellemilia`). Verificato che non esiste una regola generale affidabile
+per questi casi (MYmovies stesso è incoerente: per altri comuni multi-parola
+con preposizioni, es. "San Giovanni in Persiceto", sia la forma con sia senza
+preposizione rispondono 200). Non gestito con un'euristica ad hoc perché
+rischierebbe di rompere altri comuni: quando lo slug indovinato non
+corrisponde comunque, l'app degrada con grazia allo stesso fallback TMDB già
+esistente (nessun crash, solo assenza dell'abbinamento film-cinema).
+
+**Come riprodurre/testare**: in `src/hooks/useGeolocation.js`, sostituire
+temporaneamente il corpo dell'effetto con `setPosition({ lat, lng }); setLoading(false); return;`
+prima della vera chiamata a `navigator.geolocation`, usando le coordinate del
+comune da testare (Riva del Garda: `lat: 45.8850, lng: 10.8420`). Aprire la
+console del browser e verificare in Network le richieste verso
+`/mymovies-proxy/cinema/...`: per un comune piccolo si devono vedere due
+richieste (diretta, poi con provincia). **Ripristinare sempre il file
+originale dopo il test** (verificare con `git diff` vuoto).
+
+### Zero film in programmazione (comportamento già corretto, nessuna modifica)
+
+Quando la pagina MYmovies esiste ed è valida ma non ci sono film in
+programmazione oggi per quella città/comune (scenario legittimo, non un
+errore — riprodotto sia su Riva del Garda sia, al momento della verifica, su
+Milano stessa), `checkStructureSanity()` non trova i blocchi film attesi e
+`getFilmsForCity` lancia comunque `MyMoviesStructureError`, facendo scattare
+lo stesso fallback TMDB gestito con grazia dall'app. Questo comportamento era
+già corretto prima di questa sessione e non richiedeva modifiche — verificato
+che resta distinto correttamente dal caso "provincia non trovata" sopra
+(quest'ultimo rilevato dal testo della pagina, il primo dall'assenza dei
+blocchi film).
+
+### Copertura Overpass per cinema piccoli/di paese
+
+La query Overpass includeva solo `amenity=cinema`. Aggiunta anche la variante
+`leisure=cinema` (nodi e way), usata su OSM per alcune sale meno comuni.
+`amenity=theatre` è stato scartato: su OSM indica teatri generici, non
+necessariamente sale cinematografiche, e includerlo avrebbe rischiato più
+falsi positivi che cinema realmente recuperati. Se in una zona `Nessun cinema
+trovato nel raggio di 10 km` continua a comparire pur sapendo che esistono
+cinema nelle vicinanze, è probabile che semplicemente non siano mappati su
+OSM (limite dei dati, non un bug applicativo).
+
+### Possibile blocco di rete/dispositivo (VPN, DNS, filtro operatore)
+
+Osservato su un dispositivo a Riva del Garda: il fallback TMDB scattava con
+lo stesso identico comportamento sia su Brave sia su Chrome sullo stesso
+dispositivo/rete (quindi non imputabile al browser). `MyMoviesFetchError` ora
+distingue (`networkLevel: true`) il caso in cui il fetch non riceve mai una
+risposta HTTP (fetch fallito/timeout, sintomo tipico di un blocco a monte)
+dal caso in cui una risposta HTTP arriva comunque (solo con status non-ok).
+Quando accade il primo caso, l'app mostra un avviso aggiuntivo in home che
+suggerisce di controllare VPN/DNS/filtri di rete — **misura intermedia**, non
+sostitutiva del fix strutturale consigliato (proxy self-hosted sotto lo
+stesso dominio dell'app, così una richiesta same-origin è più difficile da
+bloccare rispetto a un dominio proxy pubblico come `proxy.cors.sh`), che
+richiede un servizio serverless dedicato non implementato in questa sessione.
+
 ### Script di controllo struttura — rilanciare periodicamente
 
 `tests/test-mymovies-scraper-struttura.js` scarica una pagina reale (Milano) e

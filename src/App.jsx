@@ -22,6 +22,7 @@ function App() {
     countryName,
     cityName,
     citySlug,
+    provinceSlug,
     error: geoCodeError,
     loading: geoCodeLoading,
   } = useReverseGeocoding(position?.lat, position?.lng);
@@ -35,8 +36,9 @@ function App() {
     films: myMoviesFilms,
     loading: myMoviesLoading,
     fallbackReason,
+    possibleNetworkBlock,
     ready: myMoviesReady,
-  } = useMyMoviesData(citySlug, cityName);
+  } = useMyMoviesData(citySlug, cityName, provinceSlug);
 
   // Nessuna città rilevabile dalla posizione (Nominatim non l'ha restituita):
   // MYmovies non è nemmeno tentabile, si va dritti al fallback.
@@ -130,6 +132,7 @@ function App() {
                     countryName={countryName}
                     usingFallback={usingFallback}
                     fallbackReason={fallbackReason}
+                    possibleNetworkBlock={possibleNetworkBlock}
                   />
                 }
               />

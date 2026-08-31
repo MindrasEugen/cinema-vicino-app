@@ -14,6 +14,7 @@ export function HomePage({
   countryName,
   usingFallback,
   fallbackReason,
+  possibleNetworkBlock,
 }) {
   return (
     <>
@@ -25,6 +26,14 @@ export function HomePage({
             {fallbackReason ? ' (MYmovies non ha risposto correttamente)' : ' per la tua città'}.
             Stiamo mostrando film e cinema come due liste separate, senza orari.
           </p>
+          {possibleNetworkBlock && (
+            <p className="hint">
+              La richiesta a MYmovies non ha ricevuto risposta: se il problema persiste
+              solo su questo dispositivo o questa rete, potrebbe trattarsi di una VPN, un
+              DNS filtrante o un blocco tracker della rete/operatore che impedisce la
+              richiesta. Provare a disattivarli o a cambiare rete può risolvere.
+            </p>
+          )}
         </div>
       )}
 

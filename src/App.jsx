@@ -14,7 +14,7 @@ import './App.css';
 
 function App() {
   // Ottieni la posizione dell'utente
-  const { position, error: geoError, loading: geoLoading } = useGeolocation();
+  const { position, error: geoError, loading: geoLoading, retry: retryGeolocation } = useGeolocation();
 
   // Ottieni paese e città dalla posizione (stessa chiamata Nominatim)
   const {
@@ -106,6 +106,13 @@ function App() {
             <p className="hint">
               L'app non puo funzionare senza accesso alla tua posizione.
             </p>
+            {/* Solo per errori di geolocalizzazione (non di reverse geocoding):
+                riprova la richiesta di permesso senza dover ricaricare la pagina. */}
+            {geoError && (
+              <button className="retry-btn" onClick={retryGeolocation}>
+                Riprova
+              </button>
+            )}
           </div>
         )}
 

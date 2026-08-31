@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
  * Hook per ottenere la posizione geografica dell'utente
- * @returns {Object} { position: {lat, lng}, error, loading, retry }
+ * @returns {Object} { position: {lat, lng}, error, loading, retry, permissionState }
  */
 export function useGeolocation() {
   const [position, setPosition] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [permissionState, setPermissionState] = useState('unsupported');
+  const permissionStatusRef = useRef(null);
+  const handlerRef = useRef(null);
 
   // Isolata in una funzione richiamabile (non solo nell'effect iniziale) per
   // permettere all'utente di ritentare dopo un diniego, senza dover
@@ -60,5 +63,61 @@ export function useGeolocation() {
     requestPosition();
   }, [requestPosition]);
 
-  return { position, error, loading, retry: requestPosition };
+  // Ascolta i cambiamenti del permesso di geolocalizzazione tramite Permissions API
+  useEffect(() => {
+    if (!navigator.permissions) {
+      setPermissionState('unsupported');
+      return;
+    }
+
+    let isMounted = true;
+
+    navigator.permissions.query({ name: 'geolocation' })
+      .then((status) => {
+        if (!isMounted) return;
+
+        permissionStatusRef.current = status;
+        setPermissionState(status.state);
+
+        // Handler per i cambiamenti del permesso
+        handlerRef.current = () => {
+          if (isMounted) {
+            setPermissionState(status.state);
+            // Se il permesso è stato appena concesso, richiedi la posizione
+            if (status.state === 'granted') {
+              requestPosition();
+            }
+          }
+        };
+
+        // Ascolta i cambiamenti
+        if (status.addEventListener) {
+          status.addEventListener('change', handlerRef.current);
+        } else if (typeof status.onchange !== 'undefined') {
+          status.onchange = handlerRef.current;
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPermissionState('unsupported');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      // Cleanup: rimuovi il listener
+      const status = permissionStatusRef.current;
+      const handler = handlerRef.current;
+      
+      if (status && handler) {
+        if (status.removeEventListener) {
+          status.removeEventListener('change', handler);
+        } else if (typeof status.onchange !== 'undefined') {
+          status.onchange = null;
+        }
+      }
+    };
+  }, [requestPosition]);
+
+  return { position, error, loading, retry: requestPosition, permissionState };
 }

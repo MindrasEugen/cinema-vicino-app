@@ -6,6 +6,7 @@ import { useNowPlayingMovies } from './hooks/useNowPlayingMovies';
 import { useNearbyCinemas } from './hooks/useNearbyCinemas';
 import { useComingSoonData } from './hooks/useComingSoonData';
 import { useTheme } from './hooks/useTheme';
+import { getGeolocationPermissionInstructions } from './utils/geolocationPermissionInstructions';
 import { mapTmdbMovieToFilm } from './services/tmdbService';
 import { HomePage } from './pages/HomePage';
 import { FilmDetailPage } from './pages/FilmDetailPage';
@@ -14,7 +15,7 @@ import './App.css';
 
 function App() {
   // Ottieni la posizione dell'utente
-  const { position, error: geoError, loading: geoLoading, retry: retryGeolocation } = useGeolocation();
+  const { position, error: geoError, loading: geoLoading, retry: retryGeolocation, permissionState } = useGeolocation();
 
   // Ottieni paese e città dalla posizione (stessa chiamata Nominatim)
   const {
@@ -109,9 +110,26 @@ function App() {
             {/* Solo per errori di geolocalizzazione (non di reverse geocoding):
                 riprova la richiesta di permesso senza dover ricaricare la pagina. */}
             {geoError && (
-              <button className="retry-btn" onClick={retryGeolocation}>
-                Riprova
-              </button>
+              <>
+                <button className="retry-btn" onClick={retryGeolocation}>
+                  Riprova
+                </button>
+
+                {/* Istruzioni per riabilitare il permesso dalle impostazioni del
+                    browser: mostrate solo quando sappiamo che è negato in modo
+                    permanente (retry da solo non basta) o quando non possiamo
+                    saperlo perché la Permissions API non è supportata. */}
+                {(permissionState === 'denied' || permissionState === 'unsupported') && (
+                  <div className="permission-instructions">
+                    <h3>Come riabilitare il permesso:</h3>
+                    <ol className="permission-steps">
+                      {getGeolocationPermissionInstructions().map((step, idx) => (
+                        <li key={idx}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

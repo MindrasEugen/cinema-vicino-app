@@ -63,6 +63,7 @@
 - **Aree rurali:** In zone poco abitate, potrebbero non esserci cinema nel raggio di 10 km
 - **Ritardi:** Le modifiche su OSM possono impiegare tempo per essere riflessi in Overpass
 - **Intermittenza del server primario:** `overpass-api.de` risponde a volte con HTTP 503 (sovraccarico) senza header CORS, causando un generico "Failed to fetch" nel browser. Per questa ragione, `src/hooks/useNearbyCinemas.js` implementa un fallback automatico: se `overpass-api.de` fallisce, ritenta automaticamente su `overpass.openstreetmap.fr` (mirror ufficiale OSM France, verificato con CORS funzionante) prima di propagare l'errore all'utente. Nota: un mirror alternativo (`overpass.kumi.systems`) è stato scartato perché, verificato il 2026-08-30, risultava in transizione verso un altro dominio (`overpass.private.coffee`) e restituiva errori 500/502 su entrambi. Se anche `overpass.openstreetmap.fr` dovesse smettere di funzionare in futuro, verificare di nuovo manualmente con curl (status HTTP + header `Access-Control-Allow-Origin`) prima di sceglierne un altro, come fatto qui.
+- **Timeout esplicito sul primario (risolto 2026-08-31, causa della lentezza percepita):** `overpass-api.de` non fallisce sempre con un errore pulito — a volte la connessione resta semplicemente appesa senza rispondere (verificato con `curl`: ~21s di timeout di rete, `http_code=000`, non un 503), mentre il mirror `overpass.openstreetmap.fr` nel frattempo risponde normalmente in meno di un secondo. Il fetch verso il primario non aveva alcun timeout esplicito (solo l'`AbortController` di smontaggio componente), quindi nel browser l'attesa prima di provare il fallback poteva essere anche più lunga dei 21s osservati con curl. Aggiunto un timeout di 8s per-tentativo (stesso pattern già usato in `comingsoonService.js`): se il primario non risponde entro 8s si passa subito al mirror. Un timeout interno viene distinto da un abort esterno (smontaggio/cambio posizione) — altrimenti il catch più esterno lo scarterebbe in silenzio invece di propagarlo al fallback/mostrarlo come errore.
 
 ### Geolocalizzazione Browser
 - **Permesso necessario:** L'utente deve consentire esplicitamente l'accesso alla posizione
@@ -90,6 +91,42 @@
 - Prova a ricaricare la pagina
 - Verifica che la tua connessione internet funzioni
 - Il servizio Nominatim potrebbe essere temporaneamente non disponibile
+
+### "Not Found" ricaricando una pagina interna (`/film/...`, `/cinema`) — risolto 2026-08-31
+
+Segnalato soprattutto da mobile (dove aprire un link condiviso o fare
+refresh/redirect è più comune che restare sempre dentro l'app cliccando),
+ma non è un problema specifico del dispositivo: riprodotto identico anche
+da riga di comando (`curl`).
+
+**Causa**: l'app usa `react-router-dom` con `BrowserRouter` (URL reali tipo
+`/film/123`), ma il deploy statico su Render (servizio "Al Cinema",
+`srv-da9l58pf2nfc73fspemg`, https://cinema-vicino-app.onrender.com) non
+aveva una regola di rewrite configurata. Cliccando dentro l'app funziona
+sempre (routing lato client, nessuna vera richiesta al server), ma un
+refresh o un link diretto genera una vera richiesta HTTP a quel path — un
+host statico puro cerca un file reale a quel percorso, non lo trova, e
+risponde 404.
+
+**Fix**: Render non supporta un file `_redirects` (a differenza di
+Netlify) — verificato con la documentazione ufficiale. Serve una regola nel
+pannello **Redirects/Rewrites** del servizio:
+Source Path `/*` → Destination Path `/index.html` → Action `Rewrite`.
+Non esiste un modo per configurarla via API (l'MCP Render collegato non
+espone le regole di redirect/rewrite, solo servizi/deploy/log), va fatto
+dal pannello: https://dashboard.render.com/static/srv-da9l58pf2nfc73fspemg.
+
+**Nota di manutenzione**: la prima volta che la regola è stata creata, gli
+status code sono tornati corretti (200 invece di 404) ma il body era vuoto
+(0 byte, nessun `Content-Type`) — verificato non essere un problema di
+cache CDN (`cf-cache-status: MISS` anche su path mai richiesti prima, quindi
+risposta fresca dall'origin Render stesso, non un residuo cache). La causa
+esatta di questo stato intermedio non è nota (nessun log a livello di
+richiesta disponibile per i siti statici via API Render per indagare
+oltre) — **cancellare e ricreare la regola identica** ha risolto. Se
+capitasse di nuovo dopo aver salvato una nuova regola, verificare prima con
+`curl -v` su un path mai richiesto (per escludere la cache) e, se il body
+risulta comunque vuoto, provare a cancellare/ricreare prima di altro.
 
 ## Note di Sviluppo
 

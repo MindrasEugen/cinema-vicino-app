@@ -40,33 +40,65 @@ export function useNearbyCinemas(lat, lng) {
 out center;
 `;
 
+    // overpass-api.de a volte non risponde affatto (connessione che resta
+    // appesa, non un errore HTTP pulito) invece di limitarsi al classico 503
+    // da sovraccarico — senza un timeout esplicito il fetch aspetterebbe
+    // indefinitamente prima di provare il mirror di fallback, che nel
+    // frattempo risponde normalmente in meno di un secondo (verificato
+    // 2026-08-31). Timeout per-tentativo, non uno condiviso tra i due, così
+    // il fallback ha comunque la sua finestra piena.
+    const OVERPASS_TIMEOUT_MS = 8000;
+
     /**
      * Funzione helper per fare il fetch da un endpoint Overpass specifico.
      * Ritorna una Promise che resolve in `data.elements` se succede,
      * oppure reject se:
-     * - la fetch stessa fallisce (network error, AbortError, ecc.)
+     * - la fetch stessa fallisce (network error, timeout, ecc.)
      * - response.ok è false
      * - il body non è JSON valido
-     * 
+     *
      * @param {string} endpoint - URL dell'API Overpass da contattare
      * @returns {Promise<Array>} Array di elementi Overpass
      */
     async function fetchFromOverpass(endpoint) {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: query,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        signal: controller.signal
-      });
+      const timeoutController = new AbortController();
+      const timeoutId = setTimeout(() => timeoutController.abort(), OVERPASS_TIMEOUT_MS);
+      const onExternalAbort = () => timeoutController.abort();
+      controller.signal.addEventListener('abort', onExternalAbort);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          body: query,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+          },
+          signal: timeoutController.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.elements || [];
+      } catch (err) {
+        // Abort esterno (smontaggio componente/cambio posizione): propaga
+        // così com'è, il chiamante lo ignora senza trattarlo come fallimento
+        // da mostrare. Un timeout interno invece NON deve sembrare un abort
+        // esterno, altrimenti il catch più esterno lo scarterebbe in
+        // silenzio invece di provare il fallback/mostrare l'errore.
+        if (err.name === 'AbortError' && controller.signal.aborted) {
+          throw err;
+        }
+        if (err.name === 'AbortError') {
+          throw new Error(`Timeout (${OVERPASS_TIMEOUT_MS}ms) contattando ${endpoint}`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+        controller.signal.removeEventListener('abort', onExternalAbort);
       }
-
-      const data = await response.json();
-      return data.elements || [];
     }
 
     /**

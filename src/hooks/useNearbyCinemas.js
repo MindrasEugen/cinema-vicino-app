@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { haversine } from '../utils/haversine';
 
+// Guardia contro risposte malformate della Geolocation API (NaN/Infinity)
+// prima di usare lat/lng nella query Overpass e nel calcolo distanza.
+function isValidLatitude(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= -90 && v <= 90;
+}
+function isValidLongitude(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= -180 && v <= 180;
+}
+
 /**
  * Hook per ottenere i cinema vicini tramite Overpass API (OpenStreetMap)
  * Implementa fallback automatico: se overpass-api.de fallisce, ritenta su overpass.openstreetmap.fr
@@ -16,6 +25,11 @@ export function useNearbyCinemas(lat, lng) {
 
   useEffect(() => {
     if (lat == null || lng == null) return;
+    if (!isValidLatitude(lat) || !isValidLongitude(lng)) {
+      console.error(`[useNearbyCinemas] Coordinate non valide: lat=${lat}, lng=${lng}`);
+      setError('Impossibile determinare la tua posizione (coordinate non valide).');
+      return;
+    }
 
     setLoading(true);
     const controller = new AbortController();

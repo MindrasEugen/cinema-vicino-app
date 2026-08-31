@@ -81,12 +81,39 @@ function isSupabaseRowFresh(fetchedAtIso, ttlMs) {
   return !!fetchedAtIso && Date.now() - new Date(fetchedAtIso).getTime() < ttlMs;
 }
 
+// La scrittura sulla cache condivisa è pubblica per design (vedi RLS in
+// NOTE.md): una riga può arrivare da un bug di un altro client o da una
+// scrittura diretta contro l'API Supabase, bypassando questa app. In lettura
+// va quindi trattata come dato non fidato — questi validatori impediscono a
+// una entry malformata di propagarsi fino al rendering (es. `.split` su un
+// campo che non è una stringa) prima di fidarsene.
+function isValidCinemaDirectoryData(cinemas) {
+  return Array.isArray(cinemas) && cinemas.every((c) =>
+    c && typeof c === 'object' &&
+    typeof c.name === 'string' &&
+    typeof c.id === 'string' &&
+    typeof c.provinceSlug === 'string' &&
+    typeof c.cinemaSlug === 'string' &&
+    typeof c.url === 'string' && c.url.startsWith('https://www.comingsoon.it/cinema/')
+  );
+}
+
+function isValidCinemaShowingsData(films) {
+  return Array.isArray(films) && films.every((f) =>
+    f && typeof f === 'object' &&
+    typeof f.filmId === 'string' &&
+    typeof f.title === 'string' &&
+    Array.isArray(f.showings)
+  );
+}
+
 /**
- * Legge una riga dalla cache condivisa Supabase, se configurata e fresca.
- * Non lancia mai eccezioni: qualunque problema (Supabase non configurato,
- * rete, RLS) fa semplicemente ricadere il chiamante sul fetch live.
+ * Legge una riga dalla cache condivisa Supabase, se configurata, fresca e
+ * strutturalmente valida (vedi validatori sopra). Non lancia mai eccezioni:
+ * qualunque problema (Supabase non configurato, rete, RLS, dato non valido)
+ * fa semplicemente ricadere il chiamante sul fetch live.
  */
-async function readSharedCache(table, matchColumn, matchValue, dataColumn, ttlMs) {
+async function readSharedCache(table, matchColumn, matchValue, dataColumn, ttlMs, isValid) {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
@@ -95,6 +122,10 @@ async function readSharedCache(table, matchColumn, matchValue, dataColumn, ttlMs
       .eq(matchColumn, matchValue)
       .maybeSingle();
     if (error || !data || !isSupabaseRowFresh(data.fetched_at, ttlMs)) return null;
+    if (!isValid(data[dataColumn])) {
+      console.warn(`[ComingSoon] Dati in cache condivisa (${table}) non validi, ignorati.`);
+      return null;
+    }
     return data[dataColumn];
   } catch {
     return null;
@@ -164,7 +195,8 @@ export async function getCinemaDirectory(provinceSlug, { signal } = {}) {
     'province_slug',
     provinceSlug,
     'cinemas',
-    SUPABASE_DIRECTORY_TTL_MS
+    SUPABASE_DIRECTORY_TTL_MS,
+    isValidCinemaDirectoryData
   );
   if (shared) {
     directoryCache.set(provinceSlug, { cinemas: shared, fetchedAt: Date.now() });
@@ -203,7 +235,8 @@ export async function getShowingsForCinema(cinema, { signal } = {}) {
     'cinema_id',
     cinema.id,
     'films',
-    SUPABASE_SHOWINGS_TTL_MS
+    SUPABASE_SHOWINGS_TTL_MS,
+    isValidCinemaShowingsData
   );
   if (shared) {
     showingsCache.set(cinema.id, { films: shared, fetchedAt: Date.now() });

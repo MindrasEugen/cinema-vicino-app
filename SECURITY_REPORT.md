@@ -30,3 +30,102 @@ Nessun altro elemento (autenticazione, deserializzazione, comandi di sistema, se
 - `src/utils/geolocationPermissionInstructions.js`
 - `src/pages/FilmDetailPage.jsx`
 - Ricerca globale per `dangerouslySetInnerHTML` / `innerHTML` / `eval` / `new Function` in `src/`
+
+---
+
+## Miglioramenti di robustezza suggeriti
+
+Nessuno di questi è una vulnerabilità di sicurezza reale (il modello di minaccia
+corretto è spiegato per ciascuno) — sono migliorie di robustezza dei dati,
+utili comunque perché la cache Supabase è scrivibile pubblicamente, quindi
+`comingsoon_cinema_directory`/`comingsoon_cinema_showings` vanno trattate come
+dati non fidati anche dal proprio client in lettura.
+
+#### 1. Validare i dati letti dalla cache condivisa → `comingsoonService.js`
+**Perché serve davvero**: la scrittura è pubblica per design (vedi NOTE.md), quindi
+un'entry malformata o malevola in cache — per bug di un altro client o per
+scrittura diretta contro l'API Supabase — arriva senza controlli fino al
+rendering (es. `film.title.split` su un valore non stringa) e può rompere la UI
+per tutti gli utenti che leggono quella riga di cache prima della scadenza del TTL.
+Validare in lettura, prima di fidarsi del dato, protegge da questo scenario
+indipendentemente dalla causa (bug o attore malevolo).
+
+**Nota**: validare anche in *scrittura* (come proposto nella versione precedente
+di questa sezione) non aggiunge protezione reale — un attore che vuole scrivere
+dati malevoli chiama direttamente l'API Supabase con la chiave pubblica,
+bypassando questo codice JS. La validazione ha senso solo lato lettura.
+
+```javascript
+function isValidCinemaDirectoryData(cinemas) {
+  return Array.isArray(cinemas) && cinemas.every((c) =>
+    c && typeof c === 'object' &&
+    typeof c.name === 'string' &&
+    typeof c.id === 'string' &&
+    typeof c.provinceSlug === 'string' &&
+    typeof c.cinemaSlug === 'string' &&
+    typeof c.url === 'string' && c.url.startsWith('https://www.comingsoon.it/cinema/')
+  );
+}
+
+function isValidCinemaShowingsData(films) {
+  return Array.isArray(films) && films.every((f) =>
+    f && typeof f === 'object' &&
+    typeof f.filmId === 'string' &&
+    typeof f.title === 'string' &&
+    Array.isArray(f.showings)
+  );
+}
+
+// In readSharedCache, dopo aver recuperato `data[dataColumn]` e prima di ritornarlo:
+const validate = table === 'comingsoon_cinema_directory'
+  ? isValidCinemaDirectoryData
+  : isValidCinemaShowingsData;
+if (!validate(data[dataColumn])) {
+  console.warn(`[ComingSoon] Dati in cache non validi per ${table}, ignorati`);
+  return null;
+}
+```
+
+#### 2. Fix range di validazione coordinate → `useNearbyCinemas.js`
+**Perché serve**: la versione precedente di questa proposta usava lo stesso
+range `[-90, 90]` sia per `lat` che per `lng`, ma la longitudine valida va da
+-180 a 180 (irrilevante per coordinate in Italia, ma sbagliato come funzione
+generica — respingerebbe longitudini legittime se il progetto si estendesse
+oltre l'Italia). Utile comunque come guardia contro risposte malformate della
+Geolocation API (`NaN`/`Infinity`) prima di usarle nella query Overpass e nel
+calcolo distanza.
+
+```javascript
+function isValidLatitude(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= -90 && v <= 90;
+}
+function isValidLongitude(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= -180 && v <= 180;
+}
+```
+
+---
+
+## Proposte scartate (nessun beneficio reale)
+
+- **Rate limiting lato client su TMDB**: la chiave è comunque leggibile nel
+  bundle; un rate limiter in-memory nel client non impedisce a chi la estrae
+  di chiamare l'API TMDB direttamente, e si azzera ad ogni reload. Non mitiga
+  il rischio che dichiara di risolvere.
+- **Aggiunte a `.gitignore`**: `.env`, `.env.local` e `*.local` sono già
+  ignorati (verificato). La riga `VITE_*` proposta non ha inoltre l'effetto
+  voluto: ignorerebbe file il cui *nome* inizia per "VITE_", non le variabili
+  d'ambiente.
+- **File `SECURITY.md` dedicato**: sovradimensionato per un progetto
+  client-only di queste dimensioni; i rischi accettati (chiavi esposte nel
+  bundle, scrittura pubblica della cache) sono già documentati dove servono
+  (`supabaseClient.js`, `NOTE.md`).
+
+---
+
+## Cosa NON richiede patch
+
+- ✅ **XSS**: Già protetto da React (nessun `dangerouslySetInnerHTML`)
+- ✅ **Link esterni**: Già hanno `rel="noopener noreferrer"`
+- ✅ **Parsing HTML**: Già basato su regex, non su DOMParser
+- ✅ **Geolocalizzazione**: Già usa Permissions API correttamente

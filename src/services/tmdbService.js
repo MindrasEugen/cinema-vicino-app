@@ -98,6 +98,34 @@ export function mapTmdbMovieToFilm(movie) {
   };
 }
 
+/**
+ * Cerca su TMDB la trama di un film per titolo (ed eventuale anno), fallback
+ * mirato usato quando la fonte primaria (ComingSoon.it) non espone una
+ * sinossi nella pagina cinema (vedi FilmDetailPage.jsx). Non tocca il resto
+ * dei dati del film, che restano quelli di ComingSoon.it. Non lancia mai
+ * eccezioni salvo AbortError: ritorna null in ogni altro caso di fallimento.
+ */
+export async function searchMovieOverview(title, year, { signal } = {}) {
+  try {
+    ensureApiKey();
+    const params = new URLSearchParams({
+      api_key: API_KEY,
+      language: 'it-IT',
+      query: title,
+    });
+    if (year) params.set('year', String(year));
+
+    const searchRes = await fetch(`${BASE_URL}/search/movie?${params.toString()}`, { signal });
+    if (!searchRes.ok) return null;
+    const searchData = await searchRes.json();
+    return searchData.results?.[0]?.overview || null;
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
+    console.warn(`[TMDB] Impossibile recuperare la trama di fallback per "${title}":`, err);
+    return null;
+  }
+}
+
 function extractYoutubeTrailerUrl(videosResponse) {
   const results = videosResponse?.results || [];
   const trailer =

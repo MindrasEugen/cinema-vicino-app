@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { StarRating } from '../components/StarRating';
-import { searchMovieTrailerUrl } from '../services/tmdbService';
+import { searchMovieTrailerUrl, searchMovieOverview } from '../services/tmdbService';
 
 const POSTER_PLACEHOLDER_SVG =
   'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzQyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDM0MiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzNDIiIGhlaWdodD0iNTEyIiBmaWxsPSIjZjVmNWY1Ii8+Cjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmaWxsPSIjZTVlN2U3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Qb3N0ZXI8L3RleHQ+Cjwvc3ZnPg==';
@@ -21,9 +21,29 @@ const POSTER_PLACEHOLDER_SVG =
 export function FilmDetailPage({ films, filmsLoading, filmsError }) {
   const { id } = useParams();
   const [trailerLookup, setTrailerLookup] = useState({ status: 'idle', url: null });
+  const [overviewFallback, setOverviewFallback] = useState({ status: 'idle', text: null });
 
   const decodedId = id ? decodeURIComponent(id) : null;
   const film = films.find((f) => f.id === decodedId);
+
+  // Fallback mirato: quando la fonte è ComingSoon.it (che non espone una
+  // sinossi) recupera solo la trama da TMDB, senza toccare il resto dei dati
+  // già disponibili (poster, cast, orari...).
+  useEffect(() => {
+    if (!film || film.overviewFull || film.overviewShort) {
+      setOverviewFallback({ status: 'idle', text: null });
+      return;
+    }
+    const controller = new AbortController();
+    setOverviewFallback({ status: 'loading', text: null });
+    searchMovieOverview(film.title, film.year, { signal: controller.signal })
+      .then((text) => setOverviewFallback({ status: text ? 'found' : 'not-found', text }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setOverviewFallback({ status: 'not-found', text: null });
+      });
+    return () => controller.abort();
+  }, [film]);
 
   if (filmsLoading) {
     return (
@@ -100,9 +120,13 @@ export function FilmDetailPage({ films, filmsLoading, filmsError }) {
             {film.rating != null && <span className="movie-vote-number"> {film.rating.toFixed(1)} / {film.ratingScale}</span>}
           </p>
 
-          {(film.overviewFull || film.overviewShort) && (
+          {film.overviewFull || film.overviewShort ? (
             <p className="movie-overview">{film.overviewFull || film.overviewShort}</p>
-          )}
+          ) : overviewFallback.status === 'loading' ? (
+            <p className="movie-showings-empty">Caricamento trama...</p>
+          ) : overviewFallback.status === 'found' ? (
+            <p className="movie-overview">{overviewFallback.text}</p>
+          ) : null}
 
           {(film.director || film.cast.length > 0) && (
             <p className="movie-cast">

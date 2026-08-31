@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { StarRating } from '../components/StarRating';
-import { findMatchingNearbyCinema } from '../services/cinemaMatcher';
 import { searchMovieTrailerUrl } from '../services/tmdbService';
 
 const POSTER_PLACEHOLDER_SVG =
@@ -12,8 +11,14 @@ const POSTER_PLACEHOLDER_SVG =
  * Riceve i dati già caricati da App.jsx (nessun fetch per-film separato):
  * funziona anche con refresh diretto sull'URL perché App.jsx avvia comunque
  * tutto il data-fetching indipendentemente dalla rotta attiva.
+ *
+ * Il matching cinema-vicino ↔ cinema-ComingSoon.it avviene una volta sola a
+ * monte, in useComingSoonData: ogni voce di `film.showingsToday` porta già
+ * con sé `nearbyCinema`, quindi qui non serve ri-matchare. `showingsToday`
+ * è `null` in modalità fallback TMDB (nessun incrocio tentato) e un array
+ * (anche vuoto) quando ComingSoon.it è la fonte attiva.
  */
-export function FilmDetailPage({ films, filmsLoading, filmsError, crossMatchAvailable, nearbyCinemas }) {
+export function FilmDetailPage({ films, filmsLoading, filmsError }) {
   const { id } = useParams();
   const [trailerLookup, setTrailerLookup] = useState({ status: 'idle', url: null });
 
@@ -54,14 +59,8 @@ export function FilmDetailPage({ films, filmsLoading, filmsError, crossMatchAvai
     });
   };
 
-  const matchedShowings = crossMatchAvailable
-    ? (film.showingsToday || [])
-        .map((showing) => ({
-          ...showing,
-          nearbyCinema: findMatchingNearbyCinema(showing.cinemaName, nearbyCinemas),
-        }))
-        .filter((showing) => showing.nearbyCinema)
-    : [];
+  const crossMatchAvailable = Array.isArray(film.showingsToday);
+  const matchedShowings = (film.showingsToday || []).filter((showing) => showing.nearbyCinema);
 
   return (
     <section className="section film-detail">
@@ -135,7 +134,7 @@ export function FilmDetailPage({ films, filmsLoading, filmsError, crossMatchAvai
               <h4>Oggi vicino a te</h4>
               {matchedShowings.length > 0 ? (
                 matchedShowings.map((showing) => (
-                  <div key={showing.myMoviesCinemaUrl} className="movie-showing-item">
+                  <div key={showing.comingSoonCinemaUrl} className="movie-showing-item">
                     <div className="movie-showing-main">
                       <span>{showing.nearbyCinema.name}</span>
                       <span className="movie-showing-times">
@@ -150,7 +149,7 @@ export function FilmDetailPage({ films, filmsLoading, filmsError, crossMatchAvai
                           Sito
                         </a>
                       )}
-                      <a href={showing.myMoviesCinemaUrl} target="_blank" rel="noopener noreferrer">
+                      <a href={showing.comingSoonCinemaUrl} target="_blank" rel="noopener noreferrer">
                         Programmazione
                       </a>
                     </span>

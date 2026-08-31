@@ -1,12 +1,12 @@
 /**
- * Confronto tollerante tra i nomi dei cinema su MYmovies e quelli ottenuti da
- * Overpass (useNearbyCinemas), per mostrare solo i cinema che proiettano un
- * film e sono anche effettivamente vicini all'utente.
- *
- * I nomi non coincidono mai esattamente tra le due fonti (es. MYmovies
- * "CINEMA Colosseo" vs OSM "Cinema Colosseo", o "Uci Cinemas Bicocca" vs
- * "UCI Cinemas Bicocca Village"), quindi il confronto normalizza e poi prova
- * corrispondenza esatta, poi per inclusione in entrambe le direzioni.
+ * Confronto tollerante tra nomi di cinema provenienti da fonti diverse — usato
+ * per il matching tra i cinema vicini via Overpass (useNearbyCinemas) e
+ * l'elenco cinema di ComingSoon.it (useComingSoonData), che non coincidono
+ * mai esattamente tra loro (es. "CINEMA Colosseo" vs "Cinema Colosseo", o
+ * "Uci Cinemas Bicocca" vs "UCI Cinemas Bicocca Village") — il confronto
+ * normalizza e poi prova corrispondenza esatta, poi per inclusione in
+ * entrambe le direzioni. Simmetrico: funziona indipendentemente da quale
+ * dei due elenchi sia passato come lista candidati.
  */
 
 const NOISE_WORDS = ['cinema', 'cinemas', 'multisala', 'multiplex', 'cityplex', 'arena'];
@@ -31,15 +31,15 @@ function normalizeName(name) {
 }
 
 /**
- * Cerca, tra i cinema vicini (Overpass), quello che meglio corrisponde al nome
- * di un cinema MYmovies. Ritorna il cinema Overpass corrispondente o null se
- * nessuno sembra abbastanza simile.
+ * Cerca, in un elenco di cinema, quello che meglio corrisponde per nome a
+ * `targetCinemaName`. Ritorna il cinema corrispondente (l'oggetto originale
+ * della lista `candidates`) o null se nessuno sembra abbastanza simile.
  */
-export function findMatchingNearbyCinema(myMoviesCinemaName, nearbyCinemas) {
-  const target = normalizeName(myMoviesCinemaName);
-  if (!target || !nearbyCinemas?.length) return null;
+export function findMatchingNearbyCinema(targetCinemaName, candidates) {
+  const target = normalizeName(targetCinemaName);
+  if (!target || !candidates?.length) return null;
 
-  for (const cinema of nearbyCinemas) {
+  for (const cinema of candidates) {
     if (normalizeName(cinema.name) === target) return cinema;
   }
 
@@ -48,7 +48,7 @@ export function findMatchingNearbyCinema(myMoviesCinemaName, nearbyCinemas) {
   // già rimosso, o iniziali di poche lettere).
   const MIN_LENGTH_FOR_SUBSTRING = 4;
   if (target.length >= MIN_LENGTH_FOR_SUBSTRING) {
-    for (const cinema of nearbyCinemas) {
+    for (const cinema of candidates) {
       const candidate = normalizeName(cinema.name);
       if (candidate.length < MIN_LENGTH_FOR_SUBSTRING) continue;
       if (candidate.includes(target) || target.includes(candidate)) {

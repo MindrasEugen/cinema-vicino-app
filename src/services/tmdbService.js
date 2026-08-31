@@ -1,8 +1,8 @@
 /**
  * Servizio TMDB isolato. Usato come fallback automatico (Parte 2 della specifica)
- * quando MYmovies non risponde o la sua struttura risulta cambiata, e come
- * arricchimento puntuale (solo trailer) quando MYmovies fornisce tutto il resto
- * dei dati ma l'estrazione del trailer per un singolo film fallisce.
+ * quando ComingSoon.it non risponde o la sua struttura risulta cambiata, e come
+ * arricchimento puntuale (solo trailer) su richiesta dell'utente, dato che
+ * ComingSoon.it non espone un URL diretto del trailer sulla pagina cinema.
  */
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -70,8 +70,8 @@ export async function fetchNowPlayingIT({ signal } = {}) {
 
 /**
  * Converte un film TMDB (shape di /movie/now_playing) nella forma comune "Film"
- * usata dall'app indipendentemente dalla fonte (vedi mymoviesParser.parseFilmBlock
- * per l'equivalente lato MYmovies). In modalità fallback l'incrocio film-cinema
+ * usata dall'app indipendentemente dalla fonte (vedi useComingSoonData.mapComingSoonFilmToFilm
+ * per l'equivalente lato ComingSoon.it). In modalità fallback l'incrocio film-cinema
  * non è disponibile: showingsToday resta null (diverso da [] = "nessuna sala oggi").
  */
 export function mapTmdbMovieToFilm(movie) {
@@ -107,11 +107,11 @@ function extractYoutubeTrailerUrl(videosResponse) {
 }
 
 /**
- * Cerca su TMDB il trailer di un film per titolo (ed eventuale anno), da usare
- * solo come fallback puntuale quando l'estrazione del trailer da MYmovies non
- * ha prodotto un URL affidabile per quel film specifico. Non lancia mai
- * eccezioni: ritorna null in ogni caso di fallimento, per non bloccare il resto
- * dei dati (che restano quelli di MYmovies).
+ * Cerca su TMDB il trailer di un film per titolo (ed eventuale anno), su
+ * richiesta dell'utente (pulsante "Cerca trailer" in FilmDetailPage), dato
+ * che ComingSoon.it non espone un URL diretto del trailer. Non lancia mai
+ * eccezioni: ritorna null in ogni caso di fallimento, per non bloccare il
+ * resto dei dati (che restano quelli di ComingSoon.it).
  */
 export async function searchMovieTrailerUrl(title, year) {
   try {

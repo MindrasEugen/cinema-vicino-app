@@ -5,13 +5,13 @@ Un'app web (solo Italia) che geolocalizza l'utente e mostra i film in programmaz
 ## Funzionalità principali
 
 - **Geolocalizzazione automatica** — Rileva la posizione dell'utente tramite browser (con permesso esplicito)
-- **Film + cinema abbinati (MYmovies.it)** — Fonte primaria: film in programmazione nella città rilevata, con sinossi, cast, trailer e le sale che li proiettano oggi, già nella stessa pagina (nessun fuzzy matching tra fonti diverse)
-- **Fallback automatico su TMDB** — Se MYmovies non risponde o cambia struttura, l'app passa da sola a TMDB (film) + Overpass (cinema vicini) come due liste separate, con una nota visibile che l'abbinamento film-cinema non è momentaneamente disponibile
-- **Cinema vicini** — Trova cinema fisici nel raggio di 10 km dalla posizione dell'utente (OpenStreetMap / Overpass), incrociati con MYmovies quando disponibile
+- **Film + cinema abbinati (ComingSoon.it)** — Fonte primaria: film in programmazione nei cinema vicini all'utente, con sinossi, cast, sale, orari e prezzi
+- **Fallback automatico su TMDB** — Se ComingSoon.it non risponde o cambia struttura, l'app passa da sola a TMDB (film) + Overpass (cinema vicini) come due liste separate, con una nota visibile che l'abbinamento film-cinema non è momentaneamente disponibile
+- **Cinema vicini** — Trova cinema fisici nel raggio di 10 km dalla posizione dell'utente (OpenStreetMap / Overpass), incrociati con ComingSoon.it quando disponibile
 - **Tema chiaro/scuro** — Selettore in header, preferenza salvata e ripristinata al ricaricamento (default: scuro)
 - **Distanze calcolate** — Mostra la distanza di ogni cinema usando la formula di Haversine
 
-Dettagli tecnici su parsing MYmovies, gestione CORS e manutenzione dello scraper in [NOTE.md](./NOTE.md#mymoviesit-come-fonte-primaria-tmdb-come-fallback-automatico).
+Dettagli tecnici su parsing ComingSoon.it, gestione CORS e manutenzione dello scraper in [NOTE.md](./NOTE.md#comingsoonit-come-fonte-primaria-tmdb-come-fallback-automatico).
 
 ## Stack tecnico
 
@@ -46,8 +46,8 @@ Dettagli tecnici su parsing MYmovies, gestione CORS e manutenzione dello scraper
 
 ## Fonti dati
 
-- **MYmovies.it** — Fonte primaria: film in programmazione, sinossi, cast, trailer e cinema che li proiettano oggi, per città
-- **TMDB (The Movie Database)** — Fallback automatico quando MYmovies non è disponibile
+- **ComingSoon.it** — Fonte primaria: film in programmazione, sinossi, cast, sale, orari e prezzi, per i cinema vicini all'utente
+- **TMDB (The Movie Database)** — Fallback automatico quando ComingSoon.it non è disponibile
 - **Nominatim (OpenStreetMap)** — Reverse geocoding per determinare paese e città
 - **Overpass API (OpenStreetMap)** — Cinema fisici nelle vicinanze
 

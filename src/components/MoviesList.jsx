@@ -7,7 +7,6 @@ const POSTER_PLACEHOLDER_SVG =
 /**
  * Card minimale: poster, titolo, voto in stelle. Nessun altro dato (sinossi,
  * cast, cinema, trailer): quelli vivono nella pagina dedicata /film/:id.
- * L'id dei film MYmovies è un URL completo, va URL-encodato nel path.
  */
 function FilmCard({ film }) {
   return (
@@ -41,7 +40,7 @@ function FilmCard({ film }) {
  * @param {Array} props.films - Array di film in forma comune
  * @param {boolean} props.loading
  * @param {string} props.error
- * @param {string} props.cityName - Nome città (fonte MYmovies)
+ * @param {string} props.cityName - Nome città (fonte ComingSoon.it)
  * @param {string} props.countryName - Nome paese (fonte TMDB, fallback)
  * @param {import('react').ReactNode} props.headerAction - Contenuto opzionale
  *   affiancato al titolo (es. il link alla pagina cinema), sulla stessa riga

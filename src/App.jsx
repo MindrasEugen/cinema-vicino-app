@@ -4,7 +4,7 @@ import { useGeolocation } from './hooks/useGeolocation';
 import { useReverseGeocoding } from './hooks/useReverseGeocoding';
 import { useNowPlayingMovies } from './hooks/useNowPlayingMovies';
 import { useNearbyCinemas } from './hooks/useNearbyCinemas';
-import { useMyMoviesData } from './hooks/useMyMoviesData';
+import { useComingSoonData } from './hooks/useComingSoonData';
 import { useTheme } from './hooks/useTheme';
 import { mapTmdbMovieToFilm } from './services/tmdbService';
 import { HomePage } from './pages/HomePage';
@@ -21,7 +21,6 @@ function App() {
     countryCode,
     countryName,
     cityName,
-    citySlug,
     provinceSlug,
     error: geoCodeError,
     loading: geoCodeLoading,
@@ -31,42 +30,43 @@ function App() {
   // su <html>, quindi resta invariato navigando tra le rotte.
   const { theme, toggleTheme } = useTheme();
 
-  // Fonte primaria: MYmovies (film + cinema che li proiettano oggi, già abbinati)
-  const {
-    films: myMoviesFilms,
-    loading: myMoviesLoading,
-    fallbackReason,
-    possibleNetworkBlock,
-    ready: myMoviesReady,
-  } = useMyMoviesData(citySlug, cityName, provinceSlug);
-
-  // Nessuna città rilevabile dalla posizione (Nominatim non l'ha restituita):
-  // MYmovies non è nemmeno tentabile, si va dritti al fallback.
-  const noCityDetected = !geoCodeLoading && !geoCodeError && !citySlug;
-
-  // Sappiamo se serve il fallback solo dopo aver risolto la città E (se risolta)
-  // tentato MYmovies: finché non lo sappiamo, TMDB resta inattivo (countryCode
-  // passato come null blocca l'effetto in useNowPlayingMovies) — TMDB non viene
-  // mai interrogato in parallelo "per uso normale", solo quando serve davvero.
-  const fallbackDecided = noCityDetected || myMoviesReady;
-  const usingFallback = noCityDetected || (myMoviesReady && !!fallbackReason);
-
-  const { movies: tmdbMovies, error: tmdbError, loading: tmdbLoading } = useNowPlayingMovies(
-    usingFallback ? countryCode : null
-  );
-
-  // Cinema vicini (Overpass): servono sempre — per l'abbinamento con MYmovies
-  // nella pagina dettaglio, e come sezione indipendente sempre visibile nella
-  // vista principale (vedi HomePage).
+  // Cinema vicini (Overpass): servono sia per la sezione indipendente sempre
+  // visibile nella vista principale, sia come input per il matching con
+  // ComingSoon.it qui sotto — vanno quindi risolti PRIMA di useComingSoonData.
   const { cinemas: nearbyCinemas, error: cinemasError, loading: cinemasLoading } = useNearbyCinemas(
     position?.lat,
     position?.lng
   );
 
-  const films = usingFallback ? tmdbMovies.map(mapTmdbMovieToFilm) : myMoviesFilms;
-  const filmsLoading = !fallbackDecided || (usingFallback ? tmdbLoading : myMoviesLoading);
+  // Fonte primaria: ComingSoon.it (film + cinema che li proiettano oggi, già
+  // incrociati con i cinema vicini qui dentro — vedi useComingSoonData).
+  const {
+    films: comingSoonFilms,
+    loading: comingSoonLoading,
+    fallbackReason,
+    possibleNetworkBlock,
+    ready: comingSoonReady,
+  } = useComingSoonData(provinceSlug, nearbyCinemas, cinemasLoading, cityName);
+
+  // Nessuna provincia rilevabile dalla posizione (Nominatim non l'ha
+  // restituita): ComingSoon.it non è nemmeno tentabile, si va dritti al fallback.
+  const noCityDetected = !geoCodeLoading && !geoCodeError && !provinceSlug;
+
+  // Sappiamo se serve il fallback solo dopo aver risolto la provincia E (se
+  // risolta) tentato ComingSoon.it: finché non lo sappiamo, TMDB resta
+  // inattivo (countryCode passato come null blocca l'effetto in
+  // useNowPlayingMovies) — TMDB non viene mai interrogato in parallelo "per
+  // uso normale", solo quando serve davvero.
+  const fallbackDecided = noCityDetected || comingSoonReady;
+  const usingFallback = noCityDetected || (comingSoonReady && !!fallbackReason);
+
+  const { movies: tmdbMovies, error: tmdbError, loading: tmdbLoading } = useNowPlayingMovies(
+    usingFallback ? countryCode : null
+  );
+
+  const films = usingFallback ? tmdbMovies.map(mapTmdbMovieToFilm) : comingSoonFilms;
+  const filmsLoading = !fallbackDecided || (usingFallback ? tmdbLoading : comingSoonLoading);
   const filmsError = usingFallback ? tmdbError : null;
-  const crossMatchAvailable = !usingFallback;
 
   // Stato per tracciare se l'utente ha visto il messaggio di benvenuto
   const [showWelcome, setShowWelcome] = useState(true);
@@ -143,8 +143,6 @@ function App() {
                     films={films}
                     filmsLoading={filmsLoading}
                     filmsError={filmsError}
-                    crossMatchAvailable={crossMatchAvailable}
-                    nearbyCinemas={nearbyCinemas}
                   />
                 }
               />
@@ -171,7 +169,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>Dati forniti da: MYmovies.it, TMDB (fallback), OpenStreetMap (Nominatim &amp; Overpass API)</p>
+        <p>Dati forniti da: ComingSoon.it, TMDB (fallback), OpenStreetMap (Nominatim &amp; Overpass API)</p>
         <button
           className="theme-toggle"
           onClick={toggleTheme}

@@ -11,6 +11,23 @@
    VITE_TMDB_API_KEY=tua_chiave_api
    ```
 
+## Come configurare la cache condivisa Supabase (opzionale)
+
+Facoltativo: senza queste variabili l'app funziona lo stesso (fetch diretto
+ogni volta, come prima di questa funzione) — vedi "Cache condivisa su
+Supabase" più sotto per i dettagli.
+
+1. Crea un progetto su [supabase.com](https://supabase.com) (piano gratuito)
+2. Applica lo schema delle due tabelli di cache — vedi la migrazione
+   `create_comingsoon_cache_tables` per lo SQL completo (tabelle
+   `comingsoon_cinema_directory`/`comingsoon_cinema_showings` con RLS)
+3. Copia URL progetto e chiave "publishable" (Project Settings → API) nel
+   file `.env`:
+   ```
+   VITE_SUPABASE_URL=https://tuoprogetto.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   ```
+
 ## Endpoint API Utilizzati
 
 ### 1. Nominatim (OpenStreetMap) - Reverse Geocoding
@@ -172,6 +189,64 @@ capitasse una situazione simile con ComingSoon.it.
 - `src/hooks/useComingSoonData.js` — orchestrazione: matching + fetch orari +
   aggregazione per film, log del fallback in console (prefisso
   `[ComingSoon]`, utile in manutenzione per capire quando/se scatta).
+- `src/services/supabaseClient.js` — client Supabase per la cache condivisa
+  (vedi sotto), `null` se non configurato.
+
+### Cache condivisa su Supabase (aggiunto 2026-08-31)
+
+Il pezzo più lento e più ripetuto del fetch (l'elenco cinema di una
+provincia, ~300KB, uguale per tutti gli utenti nella stessa zona, e le
+pagine dei singoli cinema, uguali per tutti gli utenti vicini a quel cinema)
+viene ora anche letto/scritto su una cache condivisa Postgres via Supabase
+(progetto dedicato `cinema-vicino-app`, id `wjswqerpvwockfbgjggy`, region
+`eu-central-1`), non solo dalla cache in memoria per-tab già esistente.
+
+**Pattern**: read-through/write-through **lato client**, nessun backend
+dedicato — coerente con il resto del progetto (deploy come sito statico
+puro). Ogni browser, prima di un fetch live:
+1. controlla la cache in memoria del proprio tab (esistente, invariata);
+2. se assente, interroga Supabase (`comingsoon_cinema_directory` per
+   provincia, `comingsoon_cinema_showings` per cinema) — se c'è una riga
+   abbastanza fresca (entro il TTL), la usa e si ferma qui, **zero
+   richieste a ComingSoon.it**;
+3. solo se anche questa manca/è scaduta, fa il fetch live come prima, e dopo
+   un fetch riuscito scrive il risultato su Supabase (fire-and-forget, non
+   blocca la risposta al chiamante) per i prossimi utenti.
+
+Verificato dal vivo (Torino): primo caricamento, 1 richiesta all'elenco
+provincia + 18 alle pagine dei cinema abbinati; ricaricando la pagina,
+**zero** richieste a `www.comingsoon.it` — tutti i 19 valori letti da
+Supabase invece che ri-scrapare.
+
+**TTL** (`comingsoonService.js`): 3 giorni per l'elenco cinema (cambia
+raramente), 2 ore per la programmazione (specifica del giorno). Diversi
+dalla cache in memoria (3 ore, per-tab, esistente prima di questa modifica
+e lasciata invariata).
+
+**Sicurezza (RLS)**: entrambe le tabelle hanno Row Level Security attiva.
+Lettura pubblica (`select` per chiunque, serve a questo). Scrittura pubblica
+in `insert`/`update` (ogni browser scrive dopo un fetch live riuscito) ma
+**nessuna policy `delete`** — un client anonimo non può cancellare righe
+(verificato: un `DELETE` via REST API risponde 200 ma non cancella nulla).
+La scrittura pubblica è un rischio accettato consapevolmente: i dati sono
+pubblici e non sensibili (programmazione cinematografica reperibile
+comunque su ComingSoon.it), un valore scritto male si autocorregge alla
+prossima scrittura legittima entro la finestra di TTL. Unica guardia:
+`pg_column_size(...) < 2000000` sulle policy di scrittura, contro payload
+abusivi/eccessivi.
+
+**Se Supabase non è configurato** (`.env` senza `VITE_SUPABASE_URL`/
+`VITE_SUPABASE_PUBLISHABLE_KEY`, es. clonando il repo senza le proprie
+variabili): `supabaseClient.js` esporta `supabase = null`, la cache
+condivisa viene semplicemente saltata (si legge/scrive solo la cache in
+memoria come prima di questa modifica) — nessun errore bloccante,
+funzionalità sempre opzionale.
+
+**Chiavi**: `VITE_SUPABASE_PUBLISHABLE_KEY` è la chiave "publishable"
+(`sb_publishable_...`), sicura da esporre nel bundle client — la sicurezza
+sta nelle policy RLS sul database, non nella segretezza della chiave.
+Configurata sia in `.env` locale sia come env var sul servizio Render
+("Al Cinema", `srv-da9l58pf2nfc73fspemg`) tramite l'MCP Render collegato.
 
 ### Come funziona il fetch (diverso da come funzionava con MYmovies)
 

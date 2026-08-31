@@ -20,6 +20,19 @@
  * pagina risponde ma la struttura non è più quella attesa lancia
  * ComingSoonStructureError. In entrambi i casi il chiamante decide se
  * passare al fallback TMDB.
+ *
+ * Oltre alla cache in memoria (per-tab, azzerata al refresh), i risultati
+ * passano anche da una cache condivisa su Supabase (tabelle
+ * `comingsoon_cinema_directory`/`comingsoon_cinema_showings`): il primo
+ * utente che visita una provincia/cinema paga il fetch live, gli altri nella
+ * stessa finestra di validità leggono da lì invece di rifare lo scraping.
+ * Pattern read-through/write-through lato client (nessun backend dedicato):
+ * ogni browser legge la cache condivisa prima del fetch live, e scrive il
+ * proprio risultato dopo un fetch riuscito. Se Supabase non è configurato
+ * (`supabaseClient.js` → `supabase === null`) o una chiamata fallisce, si
+ * ricade silenziosamente sul fetch live: la cache condivisa è
+ * un'ottimizzazione, mai un requisito per il funzionamento dell'app. Vedi
+ * NOTE.md per RLS, scelta dei TTL e perché la scrittura è pubblica.
  */
 import {
   parseCinemaDirectory,
@@ -27,9 +40,17 @@ import {
   isValidCinemaPage,
   parseCinemaShowingsPage,
 } from './comingsoonParser';
+import { supabase } from './supabaseClient';
 
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // qualche ora, per non ricaricare ad ogni interazione
 const FETCH_TIMEOUT_MS = 12000;
+
+// TTL della cache condivisa (Supabase), diversi da quelli della cache in
+// memoria sopra: l'elenco cinema di una provincia cambia raramente (nuove
+// sale aprono/chiudono di rado), la programmazione invece è specifica del
+// giorno, quindi la finestra di validità condivisa resta più corta.
+const SUPABASE_DIRECTORY_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 giorni
+const SUPABASE_SHOWINGS_TTL_MS = 2 * 60 * 60 * 1000; // 2 ore
 
 const directoryCache = new Map(); // provinceSlug -> { cinemas, fetchedAt }
 const showingsCache = new Map(); // cinemaId -> { films, fetchedAt }
@@ -54,6 +75,48 @@ export class ComingSoonStructureError extends Error {
 
 function isCacheFresh(entry) {
   return entry && Date.now() - entry.fetchedAt < CACHE_TTL_MS;
+}
+
+function isSupabaseRowFresh(fetchedAtIso, ttlMs) {
+  return !!fetchedAtIso && Date.now() - new Date(fetchedAtIso).getTime() < ttlMs;
+}
+
+/**
+ * Legge una riga dalla cache condivisa Supabase, se configurata e fresca.
+ * Non lancia mai eccezioni: qualunque problema (Supabase non configurato,
+ * rete, RLS) fa semplicemente ricadere il chiamante sul fetch live.
+ */
+async function readSharedCache(table, matchColumn, matchValue, dataColumn, ttlMs) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select(`${dataColumn}, fetched_at`)
+      .eq(matchColumn, matchValue)
+      .maybeSingle();
+    if (error || !data || !isSupabaseRowFresh(data.fetched_at, ttlMs)) return null;
+    return data[dataColumn];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scrive/aggiorna una riga nella cache condivisa Supabase dopo un fetch live
+ * riuscito. Fire-and-forget rispetto al chiamante (non ne blocca la
+ * risposta, il beneficio è solo per i prossimi utenti): eventuali errori
+ * finiscono solo in un console.warn, mai propagati.
+ */
+function writeSharedCache(table, matchColumn, matchValue, dataColumn, dataValue) {
+  if (!supabase) return;
+  supabase
+    .from(table)
+    .upsert({ [matchColumn]: matchValue, [dataColumn]: dataValue, fetched_at: new Date().toISOString() })
+    .then(({ error }) => {
+      if (error) {
+        console.warn(`[ComingSoon] Scrittura cache condivisa (${table}) fallita:`, error.message);
+      }
+    });
 }
 
 async function fetchHtml(url, { signal, notFoundMessage } = {}) {
@@ -96,6 +159,18 @@ export async function getCinemaDirectory(provinceSlug, { signal } = {}) {
   const cached = directoryCache.get(provinceSlug);
   if (isCacheFresh(cached)) return cached.cinemas;
 
+  const shared = await readSharedCache(
+    'comingsoon_cinema_directory',
+    'province_slug',
+    provinceSlug,
+    'cinemas',
+    SUPABASE_DIRECTORY_TTL_MS
+  );
+  if (shared) {
+    directoryCache.set(provinceSlug, { cinemas: shared, fetchedAt: Date.now() });
+    return shared;
+  }
+
   const url = `https://www.comingsoon.it/cinema/${provinceSlug}/`;
   const html = await fetchHtml(url, { signal });
 
@@ -109,6 +184,7 @@ export async function getCinemaDirectory(provinceSlug, { signal } = {}) {
 
   const cinemas = parseCinemaDirectory(html);
   directoryCache.set(provinceSlug, { cinemas, fetchedAt: Date.now() });
+  writeSharedCache('comingsoon_cinema_directory', 'province_slug', provinceSlug, 'cinemas', cinemas);
   return cinemas;
 }
 
@@ -122,6 +198,18 @@ export async function getShowingsForCinema(cinema, { signal } = {}) {
   const cached = showingsCache.get(cinema.id);
   if (isCacheFresh(cached)) return cached.films;
 
+  const shared = await readSharedCache(
+    'comingsoon_cinema_showings',
+    'cinema_id',
+    cinema.id,
+    'films',
+    SUPABASE_SHOWINGS_TTL_MS
+  );
+  if (shared) {
+    showingsCache.set(cinema.id, { films: shared, fetchedAt: Date.now() });
+    return shared;
+  }
+
   const html = await fetchHtml(cinema.url, { signal });
 
   if (!isValidCinemaPage(html, cinema.id)) {
@@ -134,6 +222,7 @@ export async function getShowingsForCinema(cinema, { signal } = {}) {
 
   const films = parseCinemaShowingsPage(html);
   showingsCache.set(cinema.id, { films, fetchedAt: Date.now() });
+  writeSharedCache('comingsoon_cinema_showings', 'cinema_id', cinema.id, 'films', films);
   return films;
 }
 

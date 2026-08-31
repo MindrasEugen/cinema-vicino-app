@@ -83,6 +83,9 @@ function App() {
   // Messaggio di errore principale (geolocalizzazione o reverse geocoding)
   const mainError = geoError || geoCodeError;
 
+  // Determina se mostrare il blocco di istruzioni per riabilitare il permesso
+  const showPermissionInstructions = permissionState === 'denied' || (permissionState === 'unsupported' && isPermissionDeniedError);
+
   return (
     <div className="app">
       <header className="header">
@@ -110,27 +113,20 @@ function App() {
             {/* Solo per errori di geolocalizzazione (non di reverse geocoding):
                 riprova la richiesta di permesso senza dover ricaricare la pagina. */}
             {geoError && (
-              <>
+              showPermissionInstructions ? (
+                <div className="permission-instructions">
+                  <h3>Come riabilitare il permesso:</h3>
+                  <ol className="permission-steps">
+                    {getGeolocationPermissionInstructions().map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              ) : (
                 <button className="retry-btn" onClick={retryGeolocation}>
                   Riprova
                 </button>
-
-                {/* Istruzioni per riabilitare il permesso dalle impostazioni del
-                    dispositivo/browser: mostrate solo quando sappiamo che è un
-                    vero diniego (via Permissions API, o via codice d'errore
-                    PERMISSION_DENIED sui browser senza quell'API) — mai per
-                    errori come timeout o posizione non disponibile. */}
-                {(permissionState === 'denied' || (permissionState === 'unsupported' && isPermissionDeniedError)) && (
-                  <div className="permission-instructions">
-                    <h3>Come riabilitare il permesso:</h3>
-                    <ol className="permission-steps">
-                      {getGeolocationPermissionInstructions().map((step, idx) => (
-                        <li key={idx}>{step}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </>
+              )
             )}
           </div>
         )}

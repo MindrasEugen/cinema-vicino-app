@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
  * Hook per ottenere la posizione geografica dell'utente
- * @returns {Object} { position: {lat, lng}, error, loading, retry, permissionState }
+ * @returns {Object} { position: {lat, lng}, error, loading, retry, permissionState, isPermissionDeniedError }
  */
 export function useGeolocation() {
   const [position, setPosition] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [permissionState, setPermissionState] = useState('unsupported');
+  const [isPermissionDeniedError, setIsPermissionDeniedError] = useState(false);
   const permissionStatusRef = useRef(null);
   const handlerRef = useRef(null);
 
@@ -21,10 +22,12 @@ export function useGeolocation() {
     // Verifica se il browser supporta la geolocalizzazione
     if (!navigator.geolocation) {
       setError('La geolocalizzazione non è supportata dal tuo browser');
+      setIsPermissionDeniedError(false);
       return;
     }
 
     setError(null);
+    setIsPermissionDeniedError(false);
     setLoading(true);
 
     const handleSuccess = (pos) => {
@@ -37,22 +40,28 @@ export function useGeolocation() {
 
     const handleError = (err) => {
       let errorMessage = 'Impossibile ottenere la posizione';
+      let isDenied = false;
 
       switch (err.code) {
         case err.PERMISSION_DENIED:
           errorMessage = 'Permesso di accesso alla posizione negato. Abilita la geolocalizzazione per questo sito nelle impostazioni del browser, poi riprova.';
+          isDenied = true;
           break;
         case err.POSITION_UNAVAILABLE:
           errorMessage = 'Le informazioni sulla posizione non sono disponibili.';
+          isDenied = false;
           break;
         case err.TIMEOUT:
           errorMessage = 'Timeout nel recupero della posizione. Riprova.';
+          isDenied = false;
           break;
         default:
           errorMessage = 'Si è verificato un errore sconosciuto nel recupero della posizione.';
+          isDenied = false;
       }
 
       setError(errorMessage);
+      setIsPermissionDeniedError(isDenied);
       setLoading(false);
     };
 
@@ -119,5 +128,62 @@ export function useGeolocation() {
     };
   }, [requestPosition]);
 
-  return { position, error, loading, retry: requestPosition, permissionState };
+  // Fallback: ri-verifica il permesso quando la tab torna visibile/focused.
+  // Questo gestisce il caso in cui l'utente cambia il permesso dalle
+  // impostazioni del browser (non dal pannello rapido della tab corrente),
+  // che non scatena l'evento `change` della Permissions API su Edge/Chromium.
+  useEffect(() => {
+    if (position) {
+      // Se abbiamo già una posizione valida, non serve ri-verificare
+      return;
+    }
+
+    let isMounted = true;
+
+    // Handler per visibilitychange e focus
+    const handleVisibilityOrFocus = () => {
+      // Ri-verifica solo se la tab è visibile e noi siamo focused, e non stiamo già caricando
+      if (!isMounted || loading) {
+        return;
+      }
+
+      if (document.visibilityState === 'visible') {
+        // Se Permissions API è disponibile, ri-verifica lo stato del permesso
+        if (navigator.permissions) {
+          navigator.permissions.query({ name: 'geolocation' })
+            .then((status) => {
+              if (isMounted && status.state === 'granted') {
+                // Il permesso è stato appena concesso
+                requestPosition();
+              }
+            })
+            .catch(() => {
+              // Permissions API non disponibile o errore: prova comunque
+              if (isMounted) {
+                requestPosition();
+              }
+            });
+        } else {
+          // Fallback: Permissions API non disponibile, prova comunque
+          // (se il permesso è ancora negato, requestPosition lo rileverà via geolocation API)
+          if (isMounted) {
+            requestPosition();
+          }
+        }
+      }
+    };
+
+    // Ascolta visibilitychange (quando la tab torna visibile)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    // Ascolta focus (quando la finestra riceve il focus)
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [position, loading, requestPosition]);
+
+  return { position, error, loading, retry: requestPosition, permissionState, isPermissionDeniedError };
 }

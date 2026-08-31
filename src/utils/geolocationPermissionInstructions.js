@@ -1,53 +1,41 @@
 /**
- * Rileva il browser dell'utente e ritorna istruzioni per abilitare il permesso di geolocalizzazione
+ * Rileva la piattaforma dell'utente e ritorna istruzioni per abilitare il permesso di geolocalizzazione
  * @returns {Array<string>} Array di passaggi in italiano
  */
 export function getGeolocationPermissionInstructions() {
   const userAgent = navigator.userAgent;
+  const platform = navigator.platform;
 
-  // Ordine dei check è importante: Edge contiene "Chrome", Safari contiene "AppleWebKit"
+  // Rilevamento per piattaforma (iOS / Android / fallback)
   
-  // Safari: cerca "Safari" e "AppleWebKit" ma NON "Chrome", "Edge", "Firefox"
-  if (/Safari/.test(userAgent) && /AppleWebKit/.test(userAgent) && !/Chrome|Edge|Firefox/.test(userAgent)) {
+  // iOS: iPhone, iPad, iPod oppure iPadOS 13+ in modalità desktop
+  // (iPadOS riporta userAgent da Mac quando in modalità desktop, distinguiamo
+  // dal vero Mac verificando se ha touch screen — maxTouchPoints > 1)
+  const isIOS = /iPhone|iPad|iPod/.test(userAgent) || 
+                (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  
+  if (isIOS) {
     return [
-      'Apri Safari > Preferenze',
-      'Vai alla scheda "Siti web"',
-      'Seleziona questo sito dall\'elenco a sinistra (o aggiungilo)',
-      'Nella colonna "Posizione" a destra, imposta su "Consenti"'
+      'Esci dal browser e vai su Impostazioni del telefono',
+      'Seleziona Privacy e sicurezza → Servizi di localizzazione',
+      'Verifica che i Servizi di localizzazione siano attivi',
+      'Cerca il tuo browser nell\'elenco e imposta "Consenti" o "Chiedi"'
     ];
   }
 
-  // Edge (Chromium-based): check "Edge" prima di "Chrome"
-  if (/Edge|Edg/.test(userAgent)) {
+  // Android
+  if (/Android/.test(userAgent)) {
     return [
-      'Clicca l\'icona di informazioni (lucchetto o "i") accanto all\'URL',
-      'Clicca "Impostazioni sito" o "Permessi"',
-      'Trova "Posizione" e impostala su "Consenti"'
+      'Tocca l\'icona del lucchetto (o la ⓘ) accanto all\'indirizzo del sito',
+      'Trova "Posizione" tra le autorizzazioni',
+      'Imposta la posizione su "Consenti"'
     ];
   }
 
-  // Chrome (e altri browser Chromium): check "Chrome"
-  if (/Chrome/.test(userAgent)) {
-    return [
-      'Clicca l\'icona di informazioni (lucchetto o "i") accanto all\'URL',
-      'Clicca "Impostazioni sito" o "Permessi"',
-      'Trova "Posizione" e impostala su "Consenti"'
-    ];
-  }
-
-  // Firefox
-  if (/Firefox/.test(userAgent)) {
-    return [
-      'Clicca l\'icona di informazioni (lucchetto) accanto all\'URL',
-      'Clicca l\'icona "posizione" o "Permessi aggiuntivi"',
-      'Imposta "Posizione" su "Consenti"'
-    ];
-  }
-
-  // Fallback per browser sconosciuti
+  // Fallback: desktop Windows/Mac/Linux o piattaforma non riconosciuta
   return [
-    'Cerca l\'icona di informazioni (lucchetto o "i") accanto alla barra degli indirizzi',
-    'Apri le impostazioni di permessi per questo sito',
-    'Cerca "Posizione" o "Location" e impostala su "Consenti"'
+    'Cerca le impostazioni/autorizzazioni del sito nel tuo browser',
+    '(Di solito sono vicino alla barra dell\'indirizzo)',
+    'Imposta la posizione su "Consenti"'
   ];
 }

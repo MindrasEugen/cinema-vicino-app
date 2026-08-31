@@ -15,7 +15,7 @@ import './App.css';
 
 function App() {
   // Ottieni la posizione dell'utente
-  const { position, error: geoError, loading: geoLoading, retry: retryGeolocation, permissionState } = useGeolocation();
+  const { position, error: geoError, loading: geoLoading, retry: retryGeolocation, permissionState, isPermissionDeniedError } = useGeolocation();
 
   // Ottieni paese e città dalla posizione (stessa chiamata Nominatim)
   const {
@@ -116,10 +116,11 @@ function App() {
                 </button>
 
                 {/* Istruzioni per riabilitare il permesso dalle impostazioni del
-                    browser: mostrate solo quando sappiamo che è negato in modo
-                    permanente (retry da solo non basta) o quando non possiamo
-                    saperlo perché la Permissions API non è supportata. */}
-                {(permissionState === 'denied' || permissionState === 'unsupported') && (
+                    dispositivo/browser: mostrate solo quando sappiamo che è un
+                    vero diniego (via Permissions API, o via codice d'errore
+                    PERMISSION_DENIED sui browser senza quell'API) — mai per
+                    errori come timeout o posizione non disponibile. */}
+                {(permissionState === 'denied' || (permissionState === 'unsupported' && isPermissionDeniedError)) && (
                   <div className="permission-instructions">
                     <h3>Come riabilitare il permesso:</h3>
                     <ol className="permission-steps">

@@ -375,6 +375,39 @@ fallback automatico su TMDB — stessa logica usata dal test, quindi i due punti
 di verifica sono sempre allineati. Si perde solo l'abbinamento film-cinema
 (mostrato con una nota visibile in app), non la disponibilità del servizio.
 
+### Controllo struttura automatico (Supabase Edge Function + cron-job.org)
+
+Lo script sopra andava rilanciato **a mano**. Dopo l'esperienza con MYmovies
+(la cui rimozione della struttura è stata scoperta solo perché segnalata
+dall'utente, non da un controllo automatico), lo stesso controllo è stato
+esposto anche come endpoint HTTP e automatizzato:
+
+- **Edge Function Supabase** `check-comingsoon-structure` (progetto
+  `wjswqerpvwockfbgjggy`, stesso progetto della cache): stessa logica dello
+  script Node (elenco cinema di una provincia di prova + campione di cinema),
+  ma richiamabile via HTTP. Risponde `200` con `{ ok: true, ... }` se la
+  struttura è quella attesa, `500` con `{ ok: false, reasons: [...] }`
+  altrimenti — i `reasons` spiegano esattamente cosa non corrisponde più.
+  URL: `https://wjswqerpvwockfbgjggy.supabase.co/functions/v1/check-comingsoon-structure`.
+  **Richiede autenticazione** (`verify_jwt: true`, deciso deliberatamente:
+  è un endpoint che genera traffico verso ComingSoon.it ad ogni chiamata,
+  meglio non lasciarlo invocabile da chiunque lo trovi) — va chiamato con
+  header `Authorization: Bearer <chiave publishable>` (la stessa
+  `VITE_SUPABASE_PUBLISHABLE_KEY` usata dall'app).
+- **cron-job.org** (servizio esterno gratuito, account dell'utente): chiama
+  quell'URL su base settimanale con l'header di autorizzazione configurato,
+  e manda un'email automatica se la risposta non è 2xx — cron-job.org tratta
+  di default qualunque status non-2xx come fallimento, nessuna configurazione
+  aggiuntiva necessaria per la notifica.
+
+Divisione dei compiti: la Edge Function fa il controllo vero e proprio ma non
+si attiva da sola; cron-job.org sa solo chiamare un URL a orario e notificare
+un fallimento, non sa fare il controllo. Nessuno dei due basta da solo.
+
+Per aggiornare la Edge Function dopo una modifica: ridistribuire con lo
+stesso nome (`check-comingsoon-structure`) crea una nuova versione, non serve
+toccare la configurazione su cron-job.org (l'URL resta lo stesso).
+
 ### Storia: da MYmovies.it a ComingSoon.it (2026-08-31)
 
 Riassunto per chi in futuro si chiedesse perché non c'è più codice MYmovies

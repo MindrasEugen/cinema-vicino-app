@@ -51,6 +51,14 @@ const PROVINCE_NAME_PREFIXES = [
  * regola generale affidabile per questi casi — quando lo slug indovinato
  * non corrisponde, il fetch fallisce con 404 e l'app degrada al fallback
  * TMDB, senza crash.
+ *
+ * Province con nome composto da trattino (es. "Massa-Carrara",
+ * "Barletta-Andria-Trani") sono invece gestite correttamente in generale:
+ * lo slug atteso da ComingSoon.it le mantiene unite da un trattino esattamente
+ * come il nome sorgente (verificato 2026-08-31 su entrambe). Il problema reale
+ * osservato su Massa non era qui, ma a monte: Nominatim per queste province
+ * valorizza `address.province` invece di `address.county`/`state_district`
+ * (vedi il fallback aggiunto in useReverseGeocoding.js).
  */
 export function normalizeProvinceCapitalSlug(rawProvinceName) {
   if (!rawProvinceName) return null;
@@ -66,6 +74,11 @@ export function normalizeProvinceCapitalSlug(rawProvinceName) {
   // Nomi bilingue (Alto Adige/Sudtirolo, es. "Bolzano - Bozen"): tiene solo
   // la prima forma, quella usata negli URL italiani del sito.
   name = name.split(' - ')[0].trim();
+
+  // Congiunzione "e" tra le due parti del nome (unico caso noto:
+  // "Pesaro e Urbino") che ComingSoon.it non include nello slug
+  // ("pesaro-urbino", non "pesaro-e-urbino" — verificato 2026-08-31).
+  name = name.replace(/\be\b/g, ' ');
 
   return name
     .replace(/[^a-z0-9\s-]/g, '')

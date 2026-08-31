@@ -56,12 +56,13 @@ const directoryCache = new Map(); // provinceSlug -> { cinemas, fetchedAt }
 const showingsCache = new Map(); // cinemaId -> { films, fetchedAt }
 
 export class ComingSoonFetchError extends Error {
-  /** @param {{ networkLevel?: boolean }} [opts] - vedi stesso campo in mymoviesService (storico) */
-  constructor(message, cause, { networkLevel = false } = {}) {
+  /** @param {{ networkLevel?: boolean, httpStatus?: number|null }} [opts] - networkLevel: vedi stesso campo in mymoviesService (storico) */
+  constructor(message, cause, { networkLevel = false, httpStatus = null } = {}) {
     super(message);
     this.name = 'ComingSoonFetchError';
     this.cause = cause;
     this.networkLevel = networkLevel;
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -160,8 +161,27 @@ async function fetchHtml(url, { signal, notFoundMessage } = {}) {
     const response = await fetch(url, { signal: timeoutController.signal });
 
     if (!response.ok) {
+      // Risposta HTTP arrivata ma non ok: non è un blocco di rete (quello
+      // finisce nel catch sotto, err.name/TypeError, mai qui). Logga subito
+      // status + un estratto del body così, se il fallimento non è
+      // riproducibile a tavolino (es. segnalato solo da un dispositivo
+      // specifico), la console di quel dispositivo ha già l'informazione utile
+      // senza dover indovinare la causa in una sessione successiva.
+      let bodyExcerpt = null;
+      try {
+        bodyExcerpt = (await response.text()).slice(0, 300);
+      } catch {
+        // il body potrebbe non essere leggibile (già consumato, connessione
+        // interrotta a metà): non è critico, l'excerpt resta null.
+      }
+      console.error(
+        `[ComingSoon] Risposta non ok per "${url}": HTTP ${response.status}.`,
+        bodyExcerpt ? { bodyExcerpt } : ''
+      );
       throw new ComingSoonFetchError(
-        notFoundMessage || `ComingSoon.it ha risposto con HTTP ${response.status} per "${url}".`
+        notFoundMessage || `ComingSoon.it ha risposto con HTTP ${response.status} per "${url}".`,
+        null,
+        { httpStatus: response.status }
       );
     }
     return await response.text();
@@ -170,6 +190,10 @@ async function fetchHtml(url, { signal, notFoundMessage } = {}) {
       throw err;
     }
     if (err instanceof ComingSoonFetchError) throw err;
+    // Qui invece nessuna risposta HTTP è mai arrivata (fetch fallito/timeout,
+    // es. TypeError "Failed to fetch"): nessuno status da loggare, solo il
+    // motivo del fallimento della fetch stessa.
+    console.error(`[ComingSoon] Fetch fallito per "${url}" (nessuna risposta HTTP): ${err.message}`);
     throw new ComingSoonFetchError(
       `Richiesta a ComingSoon.it fallita per "${url}": ${err.message}`,
       err,
@@ -208,6 +232,10 @@ export async function getCinemaDirectory(provinceSlug, { signal } = {}) {
 
   const sanity = checkCinemaDirectoryStructureSanity(html);
   if (!sanity.ok) {
+    console.error(
+      `[ComingSoon] Struttura pagina elenco-cinema inattesa per "${provinceSlug}" (HTTP 200, ma: ${sanity.reasons.join('; ')}).`,
+      { bodyExcerpt: html.slice(0, 300) }
+    );
     throw new ComingSoonStructureError(
       `La struttura della pagina elenco-cinema di ComingSoon.it per "${provinceSlug}" non corrisponde più a quella attesa.`,
       sanity.reasons
@@ -246,6 +274,10 @@ export async function getShowingsForCinema(cinema, { signal } = {}) {
   const html = await fetchHtml(cinema.url, { signal });
 
   if (!isValidCinemaPage(html, cinema.id)) {
+    console.error(
+      `[ComingSoon] Pagina cinema inattesa per "${cinema.name}" (id ${cinema.id}, HTTP 200, ma isValidCinemaPage=false — probabile redirect silenzioso alla pagina provincia).`,
+      { bodyExcerpt: html.slice(0, 300) }
+    );
     throw new ComingSoonStructureError(
       `La pagina di "${cinema.name}" (id ${cinema.id}) non sembra più essere una scheda cinema valida ` +
         '(probabile redirect silenzioso di ComingSoon.it alla pagina provincia per slug/id non più validi).',

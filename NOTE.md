@@ -450,6 +450,76 @@ nel repository, o dovesse affrontare una situazione simile:
    prima di assumere che la funzione di abbinamento film-cinema non sia più
    ottenibile in alcun modo.
 
+### "Provincia non trovata" su province con nome composto (es. Massa-Carrara) — risolto 2026-08-31
+
+Segnalato da un dispositivo a Massa (MS, CAP 54100): l'app mostrava lo stesso
+messaggio di "nessuna provincia rilevata" (`noCityDetected` in `App.jsx`)
+riservato al caso in cui Nominatim non restituisce alcuna provincia.
+
+**Causa reale (non quella inizialmente ipotizzata)**: non era un bug di
+normalizzazione dello slug. Verificato dal vivo con reverse geocoding
+Nominatim reale sulle coordinate di Massa: per le province con nome composto
+da trattino (Massa-Carrara, Barletta-Andria-Trani — verificato su entrambe),
+Nominatim valorizza il campo `address.province`, **non** `address.county` né
+`address.state_district` come per il resto delle province italiane (Torino,
+Milano, Trento, Reggio Emilia, ecc., tutte con `county` valorizzato).
+`useReverseGeocoding.js` leggeva solo `county`/`state_district`, quindi per
+queste province `province` restava `null` ancora prima di arrivare a
+`normalizeProvinceCapitalSlug` — la funzione di normalizzazione non veniva
+nemmeno chiamata con un valore utile.
+
+**Fix**: aggiunto `data.address?.province` come terzo fallback in
+`useReverseGeocoding.js`. Una volta che il valore raggiunge
+`normalizeProvinceCapitalSlug`, i nomi composti da trattino producono già lo
+slug corretto senza bisogno di modifiche (verificato: "Massa-Carrara" →
+`massa-carrara`, "Barletta-Andria-Trani" → `barletta-andria-trani`, entrambi
+`/cinema/{slug}/` con HTTP 200 e `id="lista-tag"` presente su comingsoon.it).
+
+**Bug distinto trovato durante la verifica generale**: "Pesaro e Urbino" (nome
+composto con la congiunzione "e", non un trattino) produceva invece uno slug
+sbagliato (`pesaro-e-urbino`, HTTP 200 ma senza `id="lista-tag"` — pagina non
+valida) perché `normalizeProvinceCapitalSlug` non rimuoveva la congiunzione.
+Corretto in `comingsoonParser.js`: la parola isolata "e" viene ora rimossa
+prima della sostituzione degli spazi con trattini, producendo `pesaro-urbino`
+(verificato HTTP 200 con `id="lista-tag"` presente, elenco cinema di Pesaro e
+Urbino confermato). "Reggio nell'Emilia" resta un limite noto non risolto
+(vedi commento nella funzione) — caso diverso: particella con apostrofo, non
+congiunzione "e" isolata.
+
+**Verifica end-to-end**: dati reali di Nominatim per Massa (44.0333, 10.1333)
+→ campo `province` = "Massa-Carrara" → slug `massa-carrara` → richiesta a
+`https://www.comingsoon.it/cinema/massa-carrara/` risponde 200 con l'elenco
+cinema atteso.
+
+### "ComingSoon.it non ha risposto correttamente" — segnalato su un dispositivo mobile a Milano, causa non ancora nota
+
+Un dispositivo specifico a Milano ha mostrato questo messaggio (risposta HTTP
+arrivata ma non quella attesa — `possibleNetworkBlock: false`, quindi non il
+caso "nessuna risposta" già documentato sopra), mentre altri dispositivi nella
+stessa città funzionavano correttamente con gli stessi dati. **Non
+riprodotto**: mancano evidenze dirette (status HTTP ricevuto, contenuto della
+risposta) per diagnosticare la causa — niente fix speculativi applicati.
+
+Nota: sia questo caso sia quello di Massa sopra provengono da dispositivi
+mobile, non desktop — se in futuro il problema si ripresentasse, vale la pena
+considerare anche cause legate alla rete mobile (CGNAT/IP condivisi tra
+operatori, comportamenti specifici di browser mobile), non ancora indagate
+per mancanza di evidenza diretta.
+
+**Logging migliorato per la prossima occorrenza** (`comingsoonService.js`,
+prefisso console `[ComingSoon]` già in uso):
+- risposta HTTP non-ok: ora logga subito status code + estratto (300
+  caratteri) del body, non solo il messaggio d'errore generico che arrivava
+  già a `useComingSoonData.js`;
+- fetch senza alcuna risposta HTTP (blocco di rete puro): loggato
+  distintamente, senza status (non disponibile in quel caso);
+- struttura pagina inattesa (elenco provincia o scheda cinema, HTTP 200 ma
+  contenuto diverso da quello atteso): logga anch'esso un estratto del body.
+
+Se il problema si ripresenta, controllare la console del dispositivo
+interessato: dovrebbe ora essere presente uno di questi log con il dettaglio
+utile a capire la causa esatta.
+
 ## Tema chiaro/scuro
 
 Il tema scuro esistente è invariato (stesse variabili in `:root` in `App.css`).

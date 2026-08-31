@@ -51,10 +51,20 @@ export function useReverseGeocoding(lat, lng) {
         // Provincia: ComingSoon.it elenca SEMPRE i cinema a livello di
         // capoluogo di provincia (mai del singolo comune), quindi è questo,
         // non il comune, lo slug usato per interrogarlo. Il campo Nominatim
-        // "county" non è uniforme (es. "Provincia di Trento" ma "Milano"
-        // senza prefisso) — normalizeProvinceCapitalSlug ripulisce entrambe
-        // le forme (vedi comingsoonParser.js).
-        const province = data.address?.county || data.address?.state_district || null;
+        // non è uniforme: di norma è "county" (es. "Provincia di Trento" ma
+        // "Milano" senza prefisso — normalizeProvinceCapitalSlug ripulisce
+        // entrambe le forme, vedi comingsoonParser.js), ma per le province
+        // con nome composto da trattino (es. "Massa-Carrara",
+        // "Barletta-Andria-Trani") Nominatim usa invece la chiave "province"
+        // e non valorizza affatto "county" (verificato 2026-08-31 con
+        // reverse geocoding reale su Massa, MS) — senza questo fallback
+        // provinceSlug restava null e l'app mostrava "provincia non
+        // trovata" anche con una posizione perfettamente valida.
+        const province =
+          data.address?.county ||
+          data.address?.state_district ||
+          data.address?.province ||
+          null;
 
         setCountryCode(code);
         setCountryName(name);

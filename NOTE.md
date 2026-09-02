@@ -550,11 +550,21 @@ npx pwa-assets-generator
 ```
 
 Legge `pwa-assets.config.js` e rigenera tutti i file in `public/` elencati
-sopra. Sfondo scelto per le icone maskable/apple (`#141414`, con padding 0.3)
-coerente con `--bg-color` del tema scuro di default in `App.css` — se quel
-colore cambiasse, aggiornare anche `resizeOptions.background` in
-`pwa-assets.config.js` e il campo `theme_color`/`background_color` del
-manifest in `vite.config.js`.
+sopra. Sfondo scelto per le icone maskable/apple: `#f4f4f6` (colore
+`--bg-color` del tema **chiaro**, non di quello scuro) — scelta deliberata
+per contrasto: l'icona sorgente (vedi sotto) è grigio scuro/antracite, su
+sfondo `#141414` (tema scuro) risultava poco leggibile a icona piccola
+(verificato visivamente, primo tentativo scartato). Se l'icona sorgente
+cambiasse colore in futuro, verificare di nuovo il contrasto prima di
+riusare questo stesso sfondo.
+
+**Icona sorgente** (`public/favicon.svg`, sostituita 2026-09-02): ["Film
+cinema registrazione video"](https://icon-icons.com/it/icona/film-cinema-registrazione-video-macchina-fotografica-proiettore/66132)
+di Romualdas Jurgaitis, Icon-Icons.com, licenza **CC BY 4.0** (uso
+commerciale consentito, attribuzione obbligatoria — vedi
+[README.md](./README.md#crediti)). Sostituisce l'icona precedente (mark
+astratto viola, generato in origine col progetto, nessuna licenza esterna
+da gestire).
 
 ### Strategia di cache del service worker
 

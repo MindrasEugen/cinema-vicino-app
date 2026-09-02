@@ -59,6 +59,10 @@ Dettagli tecnici su parsing ComingSoon.it, gestione CORS, cache condivisa e manu
 
 Per dettagli su endpoint API, rate limit e limitazioni note, consulta [NOTE.md](./NOTE.md#endpoint-api-utilizzati).
 
+## Crediti
+
+- Icona dell'app: ["Film cinema registrazione video"](https://icon-icons.com/it/icona/film-cinema-registrazione-video-macchina-fotografica-proiettore/66132) di [Romualdas Jurgaitis](https://icon-icons.com/it/authors/304-romualdas-jurgaitis) su Icon-Icons.com, licenza [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ## Per approfondire
 
 Vedi [NOTE.md](./NOTE.md) per:

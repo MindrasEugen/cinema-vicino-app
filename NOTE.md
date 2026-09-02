@@ -431,8 +431,10 @@ nel repository, o dovesse affrontare una situazione simile:
    (variante "versione originale", link "cerca in tutta la provincia",
    dropdown di ricerca) senza trovarne una funzionante: la funzione risultava
    effettivamente rimossa, non solo spostata.
-3. **Trovata un'alternativa funzionante**: ComingSoon.it (stesso gruppo GEDI
-   di MYmovies) espone ancora film + cinema + orari + prezzi, ma con una
+3. **Trovata un'alternativa funzionante**: ComingSoon.it (di proprietà di
+   Anicaflash S.r.l., non dello stesso gruppo di MYmovies — verificato
+   2026-09-02 dal footer/note legali del sito, "©2001-2026 Anicaflash S.r.l.")
+   espone ancora film + cinema + orari + prezzi, ma con una
    struttura diversa (elenco cinema per provincia, orari sulla pagina di
    ciascun cinema — non una singola pagina città con tutto incrociato). Il
    servizio è stato riscritto da zero su questa fonte (vedi sezioni sopra);
@@ -520,6 +522,70 @@ Se il problema si ripresenta, controllare la console del dispositivo
 interessato: dovrebbe ora essere presente uno di questi log con il dettaglio
 utile a capire la causa esatta.
 
+## PWA installabile (aggiunto 2026-09-02)
+
+L'app è ora installabile come Progressive Web App (icona su home screen/desktop,
+avvio standalone senza barra del browser), tramite `vite-plugin-pwa`.
+
+### Moduli/file coinvolti
+
+- `vite.config.js` — plugin `VitePWA` con manifest inline e configurazione
+  `workbox` per la generazione del service worker (`mode: generateSW`, di
+  default in questo plugin).
+- `pwa-assets.config.js` — configurazione di `@vite-pwa/assets-generator`
+  (usa `sharp` sotto il cofano) per generare l'intero set di icone a partire
+  da `public/favicon.svg`.
+- `public/pwa-64x64.png`, `pwa-192x192.png`, `pwa-512x512.png`,
+  `maskable-icon-512x512.png`, `apple-touch-icon-180x180.png`,
+  `favicon.ico` — icone generate, committate (non sono build output).
+- `index.html` — link `favicon.ico`/`apple-touch-icon`, meta `theme-color` e
+  `description` aggiunti manualmente (il resto, `<link rel="manifest">` e lo
+  script di registrazione del service worker, viene iniettato automaticamente
+  da `vite-plugin-pwa` in fase di build, non è nel sorgente `index.html`).
+
+### Come rigenerare le icone (se `favicon.svg` cambia)
+
+```
+npx pwa-assets-generator
+```
+
+Legge `pwa-assets.config.js` e rigenera tutti i file in `public/` elencati
+sopra. Sfondo scelto per le icone maskable/apple (`#141414`, con padding 0.3)
+coerente con `--bg-color` del tema scuro di default in `App.css` — se quel
+colore cambiasse, aggiornare anche `resizeOptions.background` in
+`pwa-assets.config.js` e il campo `theme_color`/`background_color` del
+manifest in `vite.config.js`.
+
+### Strategia di cache del service worker
+
+Precache **solo l'app shell** (`globPatterns: ['**/*.{js,css,html,svg,png,ico}']`
+in `vite.config.js`, che precacha i file emessi in `dist/`): bundle JS/CSS,
+`index.html`, icone. **Nessun `runtimeCaching` configurato per le chiamate
+API** (ComingSoon.it, TMDB, Overpass, Nominatim, Supabase) — scelta
+deliberata: la programmazione cinematografica cambia quotidianamente, una
+cache offline di quei dati rischierebbe di mostrare film/orari non più
+validi senza che l'utente se ne accorga, un problema peggiore del non avere
+supporto offline per quella parte. L'installabilità e l'avvio rapido
+dell'app shell non richiedono di cachare anche i dati.
+
+`registerType: 'autoUpdate'`: il service worker si aggiorna da solo ad ogni
+nuova build (nessun prompt "nuova versione disponibile" da gestire lato UI,
+nessun rischio che un utente resti bloccato su un bundle vecchio che magari
+non riconosce più una struttura cambiata di ComingSoon.it).
+
+### Verifica eseguita
+
+`pnpm build && pnpm preview`, poi controllo dal vivo in Chrome (via
+estensione Claude in Chrome):
+- `manifest.webmanifest` servito (200), nome/icone corretti;
+- service worker registrato e `activated` su scope `/`;
+- `theme-color` applicato.
+
+Verifica visiva dell'icona di installazione nella barra indirizzi non
+eseguita via CDP (non accessibile agli strumenti di automazione, è UI del
+browser stesso, non della pagina) — da controllare manualmente se serve
+conferma visiva.
+
 ## Tema chiaro/scuro
 
 Il tema scuro esistente è invariato (stesse variabili in `:root` in `App.css`).
@@ -529,3 +595,145 @@ propria (non un'inversione meccanica dei colori). La scelta è gestita da
 via attributo `data-theme` su `<html>`; default `dark` se non è mai stata
 scelta una preferenza. Un piccolo script inline in `index.html` applica il tema
 salvato prima del render React, per evitare un flash del tema scuro di default.
+
+## Monetizzazione (Google Ads) vs. licenze dati — valutazione 2026-09-02, rimandata
+
+Discussione avvenuta il 2026-09-02 su un'eventuale introduzione di pubblicità
+(Google Ads) nell'app. **Decisione: rimandata**, nessun cambiamento al
+codice per ora. Documentata qui perché la valutazione è stata approfondita e
+non va rifatta da zero se il tema tornerà in futuro.
+
+### Il problema di partenza: conflitto con i termini TMDB
+
+I Termini di Servizio API di TMDB (verificato su
+`https://www.themoviedb.org/api-terms-of-use`) definiscono "Commercial Use"
+(che richiede un accordo scritto separato, non coperto dalla API key
+gratuita) anche l'uso di TMDB **"in connection with a 'destination'
+website... or for driving traffic or generating revenue for a website...
+including from advertising"**. Questo varrebbe anche per il nostro caso, pur
+usando TMDB solo come fallback automatico (non fonte primaria) — la clausola
+parla di uso "in connection with" il sito, non di quanto sia centrale o
+frequente quell'uso.
+
+Da notare: anche pagando una licenza commerciale TMDB, il problema **non si
+risolverebbe del tutto** — TMDB non ha mai fornito dati su cinema/sale/orari/
+prezzi, né gratis né a pagamento (è un database film generico: titolo,
+poster, sinossi, cast, voto). Quel livello di dettaglio arriva solo da
+ComingSoon.it, la cui integrazione è comunque scraping non ufficiale,
+indipendente da qualunque accordo con TMDB. TMDB una licenza commerciale
+risolverebbe quindi solo una parte minore del problema (il fallback
+generico), non quella principale.
+
+### Alternative valutate e scartate
+
+- **Cross-referenziare più fonti scrapate** (es. una seconda fonte di
+  programmazione cinema, o Wikidata per un elenco film con uscita italiana
+  recente — quest'ultimo a licenza aperta CC0/CC-BY-SA, senza conflitti
+  contrattuali): tecnicamente fattibile, ma sposta solo il tipo di rischio
+  (da "violazione contrattuale esplicita" con TMDB a "area grigia di
+  scraping" con la seconda fonte), non lo elimina.
+- **Scraping di testate giornalistiche locali** per la programmazione:
+  valutato peggiore, non migliore — si aggiunge l'esposizione alla tutela
+  *sui generis* delle banche dati (direttiva UE 96/9/CE, protegge la
+  compilazione organizzata di dati anche quando i singoli fatti non sono
+  coperti da copyright), più il costo di dover scrapare decine di testate
+  locali diverse per una copertura nazionale (l'Italia ha un giornale per
+  provincia), più la probabilità che molte testate locali ripubblichino
+  comunque dati di un aggregatore terzo (stesso problema, un passaggio più a
+  valle).
+- **App "raccoglitrice" separata** (0 utenti, usata solo per fare lo
+  scraping, con l'app principale che legge da quella): non offre alcuna
+  protezione legale — stessa entità/persona dietro entrambe le app, i dati
+  finiscono comunque in un prodotto monetizzato che controlliamo noi. La
+  separazione tecnica non crea separazione legale (sostanza, non forma). Un
+  servizio dedicato di scraping centralizzato resta comunque una buona idea
+  **architetturale** (riduce carico su ComingSoon.it, centralizza il parsing
+  da aggiornare in un solo posto — in parte già quello che fa la cache
+  Supabase condivisa oggi), ma va valutato per quel motivo, non come
+  soluzione di conformità.
+- **Licenza commerciale TMDB a pagamento**: prezzi non pubblici (nessun
+  listino su `developer.themoviedb.org`, va negoziato direttamente con
+  loro). Anche ottenendola, risolverebbe solo il fallback generico, non il
+  problema principale (vedi sopra).
+
+### L'unica strada che risolve davvero il problema: accordo diretto con Anicaflash/ComingSoon.it
+
+Contattare Anicaflash S.r.l. (proprietaria di ComingSoon.it — vedi
+correzione più sotto) per un accordo esplicito (canone fisso e/o revenue
+share) è l'unica opzione che elimina l'area grigia invece di limitarsi a
+mitigarla. Valutazione realistica, motivo per cui è stata rimandata:
+
+- **Nessuna garanzia di risposta**, e se rispondono è ragionevole aspettarsi
+  che chiedano un compenso (hanno un business editoriale vero, partnership
+  di distribuzione consolidate con Disney/Warner/Universal/Sony/Netflix/
+  Amazon Prime e i principali distributori italiani).
+- **Una revenue share "a vita" è una struttura insolita**: le aziende in
+  genere preferiscono una durata definita (rinnovabile) e/o un canone fisso
+  (prevedibile, non richiede audit dei nostri ricavi) rispetto a una
+  percentuale perpetua su un partner piccolo e sconosciuto.
+- **Il rischio reale per loro non è "quanto guadagniamo noi" ma la
+  cannibalizzazione del traffico**: ogni utente che usa la nostra app invece
+  di visitare comingsoon.it è per loro una perdita del 100% di quella
+  pubblicità sul proprio sito — una nostra fetta del 20-30% su un traffico
+  presumibilmente molto più piccolo del loro potrebbe non compensarli
+  affatto.
+- **Downside del contattarli comunque, a prescindere dall'esito**: oggi il
+  progetto ha probabilmente un profilo basso (nessuna pubblicità, nessun
+  volume). Scrivere per chiedere un accordo significa auto-segnalarsi —
+  anche restando senza ads, potrebbero comunque chiedere di interrompere
+  l'uso *attuale* non commerciale. Cioè: contattarli rischia di creare un
+  problema che oggi non c'è, non solo di non risolverne uno futuro.
+
+**Reato vs. civile**: se rispondessero negativamente, la risposta più
+probabile è un "non siete autorizzati, interrompete l'uso" (cease and
+desist) — materia civile (diritto d'autore, banche dati, concorrenza
+sleale), non penale.
+
+### Architettura di resilienza discussa (indipendente dalla questione ads/licenza)
+
+Idea emersa durante la discussione, utile a prescindere da ads/licenze, per
+rendere l'app più robusta ai fermi di ComingSoon.it — **non implementata**,
+solo progettata a livello di logica:
+
+1. **Livello 1** (esistente): fetch live ComingSoon.it.
+2. **Livello 2**: se il fetch live fallisce e **esiste già una cache
+   Supabase** per quella provincia/cinema (anche oltre il TTL normale),
+   servirla comunque, con un avviso visibile che i dati potrebbero non
+   essere aggiornati.
+3. **Livello 3**: seconda fonte scrapata (sito candidato non ancora
+   individuato), da attivare solo per il tempo necessario a ripopolare la
+   cache Supabase, poi disattivarsi da sola. Due trigger distinti:
+   - **Nessuna cache per quella provincia** → attivare subito al primo
+     fallimento del livello 1 (non aspettare, altrimenti l'utente non vede
+     nulla).
+   - **Cache esistente ma vecchia** → attivare solo se ComingSoon.it risulta
+     giù da più di 3 giorni consecutivi (soglia scelta per non attivare la
+     seconda fonte per fermi brevi/transitori).
+   - Lo stato "giù da quanto tempo" andrebbe tenuto in una fonte autorevole
+     condivisa (es. una riga in Supabase aggiornata dall'Edge Function di
+     health-check esistente, fatta girare più spesso), non dedotto dai
+     fallimenti riportati dai singoli client (un blocco di rete locale di un
+     utente non significa che il sito sia giù per tutti).
+
+**Perché rimandata anche questa parte**: la cache Supabase oggi copre solo
+~5 comuni (si popola organicamente con l'uso reale dell'app) — il livello 2
+da solo non è quindi una rete di sicurezza nazionale, e costruire il
+livello 3 ora, senza un candidato per la seconda fonte né un obiettivo ads
+concreto a breve termine, è stato giudicato prematuro rispetto al beneficio
+attuale.
+
+### Quando ripartire da qui
+
+Rivalutare quando succede una di queste cose:
+- l'introduzione delle ads diventa un obiettivo concreto e a breve termine
+  (allora vale la pena tentare l'accordo con Anicaflash nonostante gli esiti
+  incerti, visto che è l'unica strada di reale conformità);
+- la cache Supabase cresce organicamente fino a coprire una fetta
+  significativa dell'Italia (rende il livello 2 più utile da solo);
+- viene individuato un candidato concreto per la seconda fonte (livello 3).
+
+**Correzione di un errore precedente in questo file**: la sezione storica più
+sotto ("Storia: da MYmovies.it a ComingSoon.it") indicava erroneamente
+ComingSoon.it come "stesso gruppo GEDI di MYmovies" — verificato 2026-09-02
+dal footer del sito che è di proprietà di **Anicaflash S.r.l.**, non GEDI
+(corretto anche nella sezione storica stessa).

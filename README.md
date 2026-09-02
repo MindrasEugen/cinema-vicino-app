@@ -11,6 +11,7 @@ Un'app web (solo Italia) che geolocalizza l'utente e mostra i film in programmaz
 - **Cache condivisa (opzionale)** — Se configurato Supabase, i dati ComingSoon.it già scaricati da altri utenti nella stessa zona vengono riusati invece di ri-scaricarli, per un caricamento più veloce
 - **Tema chiaro/scuro** — Selettore in header, preferenza salvata e ripristinata al ricaricamento (default: scuro)
 - **Distanze calcolate** — Mostra la distanza di ogni cinema usando la formula di Haversine
+- **Installabile come PWA** — Icona su home screen/desktop, avvio standalone senza barra del browser
 
 Dettagli tecnici su parsing ComingSoon.it, gestione CORS, cache condivisa e manutenzione dello scraper in [NOTE.md](./NOTE.md#comingsoonit-come-fonte-primaria-tmdb-come-fallback-automatico).
 
@@ -20,6 +21,7 @@ Dettagli tecnici su parsing ComingSoon.it, gestione CORS, cache condivisa e manu
 - **Vite** — Bundler veloce e configurazione minima
 - **Fetch API nativa** — Nessuna libreria HTTP esterna per i dati di film/cinema
 - **Supabase** (opzionale) — Cache condivisa Postgres per i dati ComingSoon.it, vedi sotto
+- **vite-plugin-pwa** — Manifest e service worker per l'installabilità come PWA, vedi [NOTE.md](./NOTE.md#pwa-installabile-aggiunto-2026-09-02)
 
 ## Setup rapido
 

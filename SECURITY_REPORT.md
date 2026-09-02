@@ -129,3 +129,34 @@ function isValidLongitude(v) {
 - ✅ **Link esterni**: Già hanno `rel="noopener noreferrer"`
 - ✅ **Parsing HTML**: Già basato su regex, non su DOMParser
 - ✅ **Geolocalizzazione**: Già usa Permissions API correttamente
+
+---
+
+## Aggiornamento 2026-09-02 — PWA (service worker + manifest)
+
+Ambito: superficie aggiunta per rendere l'app installabile — `vite.config.js`
+(plugin `VitePWA`), `pwa-assets.config.js`, `index.html`. Dettagli tecnici
+completi in [NOTE.md](./NOTE.md#pwa-installabile-aggiunto-2026-09-02).
+
+**Esito: nessuna vulnerabilità introdotta.**
+
+- **Nessuna cache di dati applicativi**: il service worker precacha solo
+  l'app shell (`globPatterns: ['**/*.{js,css,html,svg,png,ico}']`, build
+  output statico) — nessun `runtimeCaching` per le risposte API (ComingSoon.it,
+  TMDB, Overpass, Nominatim, Supabase). Non c'è quindi rischio che il service
+  worker serva dati (film/orari/prezzi, o risposte Supabase) stale o li
+  esponga oltre quanto già visibile a runtime.
+- **Manifest pubblico (`manifest.webmanifest`)**: contiene solo nome, colori
+  e percorsi delle icone — nessun dato sensibile, corretto che sia
+  pubblicamente accessibile.
+- **Scope del service worker**: root dell'origine (`/`), nessuna estensione
+  a domini esterni.
+- **Nuove dipendenze**: `vite-plugin-pwa` e `@vite-pwa/assets-generator`
+  sono `devDependencies` — quest'ultima (e la sua dipendenza nativa `sharp`)
+  gira solo in fase di build/generazione icone, non viene inclusa nel bundle
+  spedito al client.
+- **`registerType: 'autoUpdate'`**: il service worker si aggiorna da solo ad
+  ogni nuova build, senza richiedere un'azione dell'utente — riduce, non
+  aumenta, il rischio di un client bloccato su una versione vecchia del
+  bundle (rilevante qui perché la logica di parsing ComingSoon.it vive nel
+  bundle stesso, vedi NOTE.md).
